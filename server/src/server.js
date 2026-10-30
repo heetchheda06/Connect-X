@@ -30,7 +30,7 @@ const httpServer = http.createServer(app);
 // Setup Socket.IO
 export const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: [env.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: '*',
     credentials: true,
     methods: ['GET', 'POST'],
   },
@@ -46,7 +46,7 @@ registerSocketHandlers(io);
 app.set('io', io);
 
 const PORT = env.port;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 [ConnectX Server] Listening on http://localhost:${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 [ConnectX Server] Listening on 0.0.0.0:${PORT}`);
   console.log(`🌿 [Environment] ${env.nodeEnv}`);
 });
