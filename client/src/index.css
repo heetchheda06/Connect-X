@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Design Tokens as CSS Variables (Light mode by default) */
+  --bg-app: #F2FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-alt: #E8F5F8;
+  --border-main: #D5EBF0;
+  
+  --text-primary: #0B2A3C;
+  --text-secondary: #4F6D7A;
+  --text-muted: #94AEB8;
+  
+  --brand-50: #ECFEFF;
+  --brand-100: #CFF8FB;
+  --brand-200: #A5EEF5;
+  --brand-300: #67DDE9;
+  --brand-400: #26C4D8;
+  --brand-500: #0EA5C6;
+  --brand-600: #0A87A8;
+  --brand-700: #0B6E88;
+  --brand-800: #0F586D;
+  --brand-900: #0F485A;
+  
+  --brand-gradient: linear-gradient(135deg, #0A6BD6 0%, #0EA5C6 50%, #14C8A8 100%);
+  --deep-ocean: linear-gradient(160deg, #062C4A 0%, #0A6BD6 55%, #14C8A8 100%);
+  
+  --accent-coral: #FF7A59;
+  --accent-coral-hover: #F06847;
+  
+  --status-online: #22C55E;
+  --status-offline: #B8CCD3;
+  --status-danger: #EF4444;
+  --status-warning: #F59E0B;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CFF8FB;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A5EEF5;
+}
+
+/* Chat background subtle wave/bubble pattern */
+.bg-chat-pattern {
+  background-color: var(--bg-app);
+  background-image: radial-gradient(rgba(14, 165, 198, 0.08) 1.5px, transparent 1.5px),
+                    radial-gradient(rgba(14, 165, 198, 0.04) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+
+/* Subtle glow for read ticks inside sent bubble */
+.tick-read-glow {
+  filter: drop-shadow(0 0 2px rgba(167, 243, 208, 0.8));
+}
+
+/* Float animations */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: floatSlow 4.5s ease-in-out infinite 1.5s;
+}
