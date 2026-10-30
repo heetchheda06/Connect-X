@@ -9,10 +9,12 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
-
 export const validateEnv = () => {
-  const missing = requiredEnvVars.filter((varName) => !process.env[varName]);
+  const mongo = process.env.MONGO_URI || process.env.MONGODB_URI;
+  const missing = [];
+  if (!mongo) missing.push('MONGO_URI or MONGODB_URI');
+  if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
+
   if (missing.length > 0) {
     console.error(`[FATAL] Missing required environment variables: ${missing.join(', ')}`);
     process.exit(1);
@@ -21,7 +23,7 @@ export const validateEnv = () => {
 
 export const env = {
   port: parseInt(process.env.PORT, 10) || 5000,
-  mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/connectx',
+  mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/connectx',
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
