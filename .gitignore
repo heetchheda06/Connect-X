@@ -16,6 +16,9 @@ uploads/*
 server/uploads/*
 !server/uploads/.gitkeep
 
+# Firebase cache
+.firebase/
+
 # Production builds
 dist/
 client/dist/
