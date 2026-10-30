@@ -34,6 +34,17 @@ export const protect = async (req, res, next) => {
       });
     }
 
+    // Check tokenVersion to invalidate sessions on security events (password change, unlinking, takeover protection)
+    const tokenVersionInToken = decoded.tokenVersion ?? 0;
+    const userTokenVersion = user.tokenVersion ?? 0;
+    if (tokenVersionInToken !== userTokenVersion) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session has expired or was revoked. Please log in again.',
+        data: null,
+      });
+    }
+
     req.user = user;
     next();
   } catch (error) {
@@ -51,4 +62,3 @@ export const protect = async (req, res, next) => {
     });
   }
 };
-

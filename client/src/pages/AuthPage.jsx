@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore.js';
+import useGoogleAuth from '../hooks/useGoogleAuth.js';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx';
 
 export default function AuthPage({ initialMode = 'login' }) {
   const navigate = useNavigate();
@@ -25,10 +27,25 @@ export default function AuthPage({ initialMode = 'login' }) {
   const from = location.state?.from?.pathname || '/';
 
   const { login, register, isLoading } = useAuthStore();
+  const { signInWithGoogle, isLoading: isGoogleLoading } = useGoogleAuth();
 
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    const result = await signInWithGoogle();
+    if (result.success) {
+      toast.success(`Welcome to ConnectX, ${result.user.name}! 🌊`, {
+        style: {
+          borderRadius: '12px',
+          background: '#0B2A3C',
+          color: '#fff',
+        },
+      });
+      navigate(from, { replace: true });
+    }
+  };
 
   // Form states
   const [loginForm, setLoginForm] = useState({
@@ -540,6 +557,23 @@ export default function AuthPage({ initialMode = 'login' }) {
               </button>
             </form>
           )}
+
+          {/* Social Divider */}
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border-main" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="px-3 bg-surface text-text-muted font-medium">or continue with</span>
+            </div>
+          </div>
+
+          {/* Google Sign In Button */}
+          <GoogleSignInButton
+            onClick={handleGoogleSignIn}
+            isLoading={isGoogleLoading}
+            text={mode === 'login' ? 'Continue with Google' : 'Sign up with Google'}
+          />
 
           {/* Social / Security footnote */}
           <div className="mt-6 pt-5 border-t border-border-main text-center text-xs text-text-muted">

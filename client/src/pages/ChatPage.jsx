@@ -8,6 +8,7 @@ import Composer from '../components/chat/Composer.jsx';
 import InfoDrawer from '../components/chat/InfoDrawer.jsx';
 import Lightbox from '../components/chat/Lightbox.jsx';
 import EditProfileModal from '../components/modals/EditProfileModal.jsx';
+import CompleteProfileModal from '../components/modals/CompleteProfileModal.jsx';
 import NewChatModal from '../components/modals/NewChatModal.jsx';
 import CreateGroupModal from '../components/modals/CreateGroupModal.jsx';
 import DiscoverRoomsModal from '../components/modals/DiscoverRoomsModal.jsx';
@@ -24,7 +25,7 @@ import { Waves, MessageSquare } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function ChatPage() {
-  const { user } = useAuthStore();
+  const { user, justSignedUpWithGoogle, setJustSignedUpWithGoogle } = useAuthStore();
   const { socket } = useSocket();
   const {
     conversations,
@@ -242,6 +243,11 @@ export default function ChatPage() {
       <EditProfileModal
         isOpen={isEditProfileOpen}
         onClose={() => setIsEditProfileOpen(false)}
+      />
+
+      <CompleteProfileModal
+        isOpen={justSignedUpWithGoogle}
+        onClose={() => setJustSignedUpWithGoogle(false)}
       />
 
       <NewChatModal

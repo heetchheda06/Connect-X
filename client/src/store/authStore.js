@@ -21,6 +21,7 @@ export const useAuthStore = create((set, get) => ({
   isLoading: false,
   isCheckingAuth: true,
   error: null,
+  justSignedUpWithGoogle: false,
 
   // Verify stored token on app load or refresh
   checkAuth: async () => {
@@ -131,6 +132,21 @@ export const useAuthStore = create((set, get) => ({
       });
     }
   },
+
+  setSession: (user, token, isNewUser = false) => {
+    localStorage.setItem('connectx_token', token);
+    localStorage.setItem('connectx_user', JSON.stringify(user));
+    set({
+      user,
+      token,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      justSignedUpWithGoogle: Boolean(isNewUser),
+    });
+  },
+
+  setJustSignedUpWithGoogle: (val) => set({ justSignedUpWithGoogle: Boolean(val) }),
 
   updateUser: (updatedFields) => {
     const currentUser = get().user;

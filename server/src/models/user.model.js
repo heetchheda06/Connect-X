@@ -1,6 +1,25 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const authProviderSchema = new mongoose.Schema(
+  {
+    provider: {
+      type: String,
+      enum: ['local', 'google'],
+      required: true,
+    },
+    providerId: {
+      type: String,
+      default: '',
+    },
+    linkedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -30,11 +49,35 @@ const userSchema = new mongoose.Schema(
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
       index: true,
     },
+    // Optional in schema; required only for local password registration
     password: {
       type: String,
-      required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters long'],
       select: false,
+      default: null,
+    },
+    authProviders: {
+      type: [authProviderSchema],
+      default: () => [{ provider: 'local' }],
+    },
+    googleUid: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    avatarSource: {
+      type: String,
+      enum: ['upload', 'google', 'generated'],
+      default: 'generated',
     },
     avatar: {
       type: String,
@@ -64,9 +107,9 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
+// Hash password before saving (only if password is set and modified)
 userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password') || !this.password) return next();
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -76,8 +119,9 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// Compare password method
+// Compare password method (returns false if account has no password, e.g. Google-only)
 userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
 
@@ -90,4 +134,3 @@ userSchema.methods.toJSON = function () {
 
 export const User = mongoose.model('User', userSchema);
 export default User;
-

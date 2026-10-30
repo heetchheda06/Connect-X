@@ -1,6 +1,15 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { register, login, getMe, logout } from '../controllers/auth.controller.js';
+import {
+  register,
+  login,
+  googleLogin,
+  setPassword,
+  getAuthProviders,
+  unlinkGoogle,
+  getMe,
+  logout,
+} from '../controllers/auth.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.js';
 import { authLimiter } from '../middleware/rateLimiters.js';
@@ -55,10 +64,34 @@ const loginRules = [
     .withMessage('Please enter your password'),
 ];
 
+const googleLoginRules = [
+  body('idToken')
+    .isString()
+    .notEmpty()
+    .withMessage('Firebase ID token is required')
+    .isLength({ max: 8192 })
+    .withMessage('Invalid token length'),
+];
+
+const setPasswordRules = [
+  body('password')
+    .isString()
+    .notEmpty()
+    .withMessage('Password is required')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+];
+
+// Public Auth routes
 router.post('/register', authLimiter, validate(registerRules), register);
 router.post('/login', authLimiter, validate(loginRules), login);
+router.post('/google', authLimiter, validate(googleLoginRules), googleLogin);
+
+// Protected Auth & Session routes
 router.get('/me', protect, getMe);
 router.post('/logout', protect, logout);
+router.get('/providers', protect, getAuthProviders);
+router.post('/set-password', protect, authLimiter, validate(setPasswordRules), setPassword);
+router.post('/unlink-google', protect, authLimiter, unlinkGoogle);
 
 export default router;
-

@@ -24,6 +24,13 @@ export const socketAuthMiddleware = async (socket, next) => {
       return next(new Error('Authentication error: User account not found'));
     }
 
+    // Verify tokenVersion to reject revoked/invalidated sessions
+    const tokenVersionInToken = decoded.tokenVersion ?? 0;
+    const userTokenVersion = user.tokenVersion ?? 0;
+    if (tokenVersionInToken !== userTokenVersion) {
+      return next(new Error('Authentication error: Session revoked. Please log in again'));
+    }
+
     socket.user = user;
     next();
   } catch (error) {
@@ -32,4 +39,3 @@ export const socketAuthMiddleware = async (socket, next) => {
 };
 
 export default socketAuthMiddleware;
-

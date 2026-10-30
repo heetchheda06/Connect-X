@@ -1,5 +1,6 @@
 import User from '../models/user.model.js';
 import storageService from '../services/storage.service.js';
+import { isValidUsername } from '../services/usernameService.js';
 
 /**
  * Search users by name or username
@@ -172,4 +173,111 @@ export const uploadAvatar = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Check username availability
+ * GET /api/users/username-available?u=
+ */
+export const checkUsernameAvailable = async (req, res, next) => {
+  try {
+    const { u = '' } = req.query;
+    const username = u.toLowerCase().trim();
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username parameter "u" is required.',
+        data: null,
+      });
+    }
+
+    if (!isValidUsername(username)) {
+      return res.status(200).json({
+        success: true,
+        message: 'Username format is invalid or name is reserved.',
+        data: {
+          available: false,
+          username,
+          reason: 'Must be 3-20 characters, lowercase letters, numbers, or underscores, and cannot be a reserved name.',
+        },
+      });
+    }
+
+    // Check collision in database
+    const existing = await User.findOne({ username });
+    if (existing) {
+      const isCurrentUsers = req.user && existing._id.equals(req.user._id);
+      return res.status(200).json({
+        success: true,
+        message: isCurrentUsers ? 'This is already your username' : 'Username is already taken',
+        data: {
+          available: Boolean(isCurrentUsers),
+          username,
+          reason: isCurrentUsers ? null : 'Username is already taken by another user',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Username is available!',
+      data: {
+        available: true,
+        username,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update username for authenticated user
+ * PUT /api/users/username
+ */
+export const updateUsername = async (req, res, next) => {
+  try {
+    const { username } = req.body;
+    const normalized = (username || '').toLowerCase().trim();
+
+    if (!isValidUsername(normalized)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be 3-20 characters long, lowercase letters, numbers, or underscores only, and cannot be a reserved name.',
+        data: null,
+      });
+    }
+
+    // Check if taken by another user
+    const existing = await User.findOne({
+      username: normalized,
+      _id: { $ne: req.user._id },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'This username is already taken. Please choose another one.',
+        data: null,
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { username: normalized } },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Username updated successfully!',
+      data: {
+        user: updatedUser,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

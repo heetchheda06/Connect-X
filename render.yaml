@@ -19,3 +19,6 @@ services:
         generateValue: true
       - key: MONGODB_URI
         sync: false
+      - key: FIREBASE_PROJECT_ID
+        value: connect-x-1af38
+

@@ -8,12 +8,16 @@ import { connectDB } from './config/db.js';
 import { createApp } from './app.js';
 import { socketAuthMiddleware } from './sockets/socket.auth.js';
 import { registerSocketHandlers } from './sockets/socket.handler.js';
+import { initFirebaseAdmin } from './config/firebaseAdmin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Validate critical environment variables
 validateEnv();
+
+// Initialize Firebase Admin SDK
+initFirebaseAdmin();
 
 // Ensure uploads folder exists
 const uploadsDir = path.join(__dirname, '../uploads');

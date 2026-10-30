@@ -17,6 +17,18 @@ export const updateProfileApi = async (profileData) => {
   return response.data;
 };
 
+export const checkUsernameAvailableApi = async (username) => {
+  const response = await api.get('/users/username-available', {
+    params: { u: username },
+  });
+  return response.data;
+};
+
+export const updateUsernameApi = async (username) => {
+  const response = await api.put('/users/username', { username });
+  return response.data;
+};
+
 export const uploadAvatarApi = async (formData) => {
   const response = await api.post('/users/avatar', formData, {
     headers: {
@@ -25,4 +37,3 @@ export const uploadAvatarApi = async (formData) => {
   });
   return response.data;
 };
-
