@@ -96,9 +96,11 @@ export default function CompleteProfileModal({ isOpen, onClose }) {
       return;
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowed.includes(file.type)) {
-      toast.error('Only JPEG, PNG, WEBP, and GIF images are supported');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg'];
+    const isImage = (file.type && file.type.startsWith('image/')) || allowedExtensions.includes(ext);
+    if (!isImage) {
+      toast.error('Only image files (JPG, PNG, WEBP, GIF, AVIF) are supported');
       return;
     }
 

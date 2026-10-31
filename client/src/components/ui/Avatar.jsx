@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getAvatarPalette, getInitials } from '../../utils/avatar.js';
 import { getMediaUrl } from '../../utils/file.js';
 
@@ -12,6 +12,10 @@ export default function Avatar({
   className = '',
 }) {
   const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
 
   const sizeClasses = {
     xs: 'w-6 h-6 text-[10px]',

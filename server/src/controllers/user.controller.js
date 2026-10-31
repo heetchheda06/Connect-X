@@ -116,6 +116,9 @@ export const updateProfile = async (req, res, next) => {
 
     if (avatar !== undefined) {
       updates.avatar = avatar;
+      if (avatar === '') {
+        updates.avatarSource = 'generated';
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -160,7 +163,7 @@ export const uploadAvatar = async (req, res, next) => {
 
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
-      { $set: { avatar: avatarUrl } },
+      { $set: { avatar: avatarUrl, avatarSource: 'upload' } },
       { new: true }
     ).select('-password');
 

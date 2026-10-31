@@ -50,6 +50,7 @@ export default function EditProfileModal({ isOpen, onClose }) {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || '');
   const [selectedFile, setSelectedFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // Username edit state
   const [isEditingUsername, setIsEditingUsername] = useState(false);
@@ -148,7 +149,7 @@ export default function EditProfileModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -157,21 +158,56 @@ export default function EditProfileModal({ isOpen, onClose }) {
       return;
     }
 
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowed.includes(file.type)) {
-      toast.error('Only JPEG, PNG, WEBP, and GIF images are supported');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg'];
+    const isImage = (file.type && file.type.startsWith('image/')) || allowedExtensions.includes(ext);
+
+    if (!isImage) {
+      toast.error('Only image files (JPG, PNG, WEBP, GIF, AVIF) are supported');
       return;
     }
 
-    setSelectedFile(file);
     const objectUrl = URL.createObjectURL(file);
     setAvatarPreview(objectUrl);
+
+    try {
+      setIsUploadingAvatar(true);
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const uploadRes = await uploadAvatarApi(formData);
+      if (uploadRes.success && uploadRes.data?.user) {
+        updateUser(uploadRes.data.user);
+        setAvatarPreview(uploadRes.data.avatarUrl);
+        setSelectedFile(null);
+        toast.success('Profile photo updated! ✨');
+      } else {
+        throw new Error(uploadRes.message || 'Upload failed');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to upload photo');
+      setAvatarPreview(user?.avatar || '');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
-  const handleRemoveAvatar = () => {
-    setSelectedFile(null);
-    setAvatarPreview('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleRemoveAvatar = async () => {
+    try {
+      setIsUploadingAvatar(true);
+      const res = await updateProfileApi({ avatar: '' });
+      if (res.success && res.data?.user) {
+        updateUser(res.data.user);
+        setAvatarPreview('');
+        setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        toast.success('Avatar reset to default gradient.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove avatar');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleSaveUsername = async () => {
@@ -265,24 +301,12 @@ export default function EditProfileModal({ isOpen, onClose }) {
 
     try {
       setIsSubmitting(true);
-      let updatedAvatarUrl = avatarPreview;
 
-      // 1. If a new file was chosen, upload it first
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append('avatar', selectedFile);
-        const uploadRes = await uploadAvatarApi(formData);
-        if (uploadRes.success && uploadRes.data?.avatarUrl) {
-          updatedAvatarUrl = uploadRes.data.avatarUrl;
-        }
-      }
-
-      // 2. Update text fields
       const res = await updateProfileApi({
         name: name.trim(),
         bio: bio.trim(),
         status: status.trim(),
-        avatar: selectedFile ? updatedAvatarUrl : (avatarPreview ? user?.avatar : ''),
+        avatar: avatarPreview,
       });
 
       if (res.success && res.data?.user) {
@@ -334,11 +358,16 @@ export default function EditProfileModal({ isOpen, onClose }) {
               />
               <button
                 type="button"
+                disabled={isUploadingAvatar}
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 rounded-full bg-deep-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                className="absolute inset-0 rounded-full bg-deep-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white disabled:opacity-60 disabled:cursor-not-allowed"
                 title="Change Photo"
               >
-                <Camera className="w-6 h-6" />
+                {isUploadingAvatar ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-white" />
+                ) : (
+                  <Camera className="w-6 h-6" />
+                )}
               </button>
             </div>
 
@@ -359,17 +388,23 @@ export default function EditProfileModal({ isOpen, onClose }) {
                 />
                 <button
                   type="button"
+                  disabled={isUploadingAvatar}
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-surface border border-border-main text-xs font-semibold text-text-primary hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 transition-all shadow-subtle"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-surface border border-border-main text-xs font-semibold text-text-primary hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200 transition-all shadow-subtle disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Upload className="w-3.5 h-3.5 text-brand-500" />
-                  Upload Photo
+                  {isUploadingAvatar ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5 text-brand-500" />
+                  )}
+                  {isUploadingAvatar ? 'Uploading...' : 'Upload Photo'}
                 </button>
                 {avatarPreview && (
                   <button
                     type="button"
+                    disabled={isUploadingAvatar}
                     onClick={handleRemoveAvatar}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-surface border border-status-danger/30 text-xs font-semibold text-status-danger hover:bg-status-danger/5 transition-all shadow-subtle"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-surface border border-status-danger/30 text-xs font-semibold text-status-danger hover:bg-status-danger/5 transition-all shadow-subtle disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Reset

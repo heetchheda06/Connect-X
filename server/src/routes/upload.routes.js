@@ -1,3 +1,4 @@
+import path from 'path';
 import express from 'express';
 import { protect } from '../middleware/auth.middleware.js';
 import { generalUpload } from '../config/multer.js';
@@ -10,9 +11,13 @@ router.use(protect);
 const ALLOWED_MIME_TYPES = [
   // Images
   'image/jpeg',
+  'image/jpg',
+  'image/pjpeg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/avif',
+  'image/svg+xml',
   // Documents
   'application/pdf',
   'application/msword',
@@ -25,6 +30,11 @@ const ALLOWED_MIME_TYPES = [
   // Archives
   'application/zip',
   'application/x-zip-compressed',
+];
+
+const ALLOWED_EXTENSIONS = [
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip'
 ];
 
 router.post(
@@ -51,8 +61,12 @@ router.post(
         });
       }
 
-      // Check mime type whitelist
-      if (!ALLOWED_MIME_TYPES.includes(req.file.mimetype)) {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const isAllowedMime = ALLOWED_MIME_TYPES.includes(req.file.mimetype) || (req.file.mimetype && req.file.mimetype.startsWith('image/'));
+      const isAllowedExt = ALLOWED_EXTENSIONS.includes(ext);
+
+      // Check mime type and extension
+      if (!isAllowedMime && !isAllowedExt) {
         // Delete rejected file from disk
         await storageService.deleteFile(req.file.filename);
         return res.status(400).json({
