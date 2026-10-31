@@ -8,12 +8,16 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// Request interceptor: attach token
+// Request interceptor: attach token & format headers
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('connectx_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // For FormData uploads, remove Content-Type header so browser/axios sets multipart boundary automatically
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
     }
     return config;
   },

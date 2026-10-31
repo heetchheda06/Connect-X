@@ -30,10 +30,6 @@ export const updateUsernameApi = async (username) => {
 };
 
 export const uploadAvatarApi = async (formData) => {
-  const response = await api.post('/users/avatar', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  const response = await api.post('/users/avatar', formData);
   return response.data;
 };

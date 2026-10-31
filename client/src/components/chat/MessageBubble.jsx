@@ -37,6 +37,7 @@ export default function MessageBubble({
   const attachment = message.attachment;
   const hasImage = attachment && isImageFile(attachment.mimeType, attachment.name);
   const hasFile = attachment && !hasImage;
+  const [imageFailed, setImageFailed] = React.useState(false);
 
   const { settings: aiSettings, languages } = useAiStore();
   const { 
@@ -128,11 +129,12 @@ export default function MessageBubble({
         ) : (
           <>
             {/* Image Attachment Preview */}
-            {hasImage && (
+            {hasImage && !imageFailed && (
               <div className="mb-2 overflow-hidden rounded-xl bg-deep-900/10 border border-black/5">
                 <img
                   src={getMediaUrl(attachment.url)}
                   alt={attachment.name || 'Shared image'}
+                  onError={() => setImageFailed(true)}
                   onClick={() => onImageClick && onImageClick({ ...attachment, url: getMediaUrl(attachment.url) })}
                   className="max-h-72 w-full object-cover rounded-xl cursor-pointer hover:opacity-95 transition-opacity"
                   loading="lazy"
@@ -140,8 +142,8 @@ export default function MessageBubble({
               </div>
             )}
 
-            {/* Document / File Attachment Card */}
-            {hasFile && (
+            {/* Document / File Attachment Card or Image Preview Fallback */}
+            {(hasFile || (hasImage && imageFailed)) && (
               <div
                 className={`mb-2 p-2.5 rounded-xl border flex items-center justify-between gap-3 ${
                   isOwn
@@ -158,7 +160,7 @@ export default function MessageBubble({
                       {attachment.name}
                     </p>
                     <span className={`text-[10px] ${isOwn ? 'text-white/80' : 'text-text-muted'}`}>
-                      {formatFileSize(attachment.size)}
+                      {formatFileSize(attachment.size)} {imageFailed ? '· (Preview unavailable)' : ''}
                     </span>
                   </div>
                 </div>
