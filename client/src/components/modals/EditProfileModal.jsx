@@ -13,10 +13,18 @@ import {
   ShieldCheck,
   AlertCircle,
   Unlink,
-  Lock
+  Lock,
+  Sparkles,
+  Globe,
+  Clock,
+  ExternalLink,
+  Shield,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore.js';
+import { useAiStore } from '../../store/aiStore.js';
+import AiOnboardingModal from './AiOnboardingModal.jsx';
 import { 
   updateProfileApi, 
   uploadAvatarApi, 
@@ -78,7 +86,22 @@ export default function EditProfileModal({ isOpen, onClose }) {
   // Unlink Google confirmation state
   const [isUnlinkingGoogle, setIsUnlinkingGoogle] = useState(false);
 
-  // Refresh user fields on modal open
+  // Tab & AI features state
+  const [activeTab, setActiveTab] = useState('profile');
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  const {
+    settings: aiSettings,
+    languages,
+    providers,
+    isUpdating: isUpdatingAi,
+    updateSettings: updateAiSettings,
+    fetchLanguages,
+    fetchProviders: fetchAiProviders,
+    fetchSettings: fetchAiSettings,
+  } = useAiStore();
+
+  // Refresh user fields and AI settings on modal open
   useEffect(() => {
     if (isOpen && user) {
       setName(user.name || '');
@@ -89,6 +112,9 @@ export default function EditProfileModal({ isOpen, onClose }) {
       setIsEditingUsername(false);
       setIsSettingPassword(false);
       fetchProviders();
+      fetchAiSettings();
+      fetchLanguages();
+      fetchAiProviders();
     }
   }, [isOpen, user]);
 
@@ -345,8 +371,40 @@ export default function EditProfileModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <div className="p-6 space-y-6 overflow-y-auto">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-border-main px-6 bg-surface-alt/40">
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`py-3 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'profile'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-text-muted hover:text-text-primary'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            Profile & Account
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ai')}
+            className={`py-3 px-3 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeTab === 'ai'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-text-muted hover:text-text-primary'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-brand-500" />
+            AI Features
+            {aiSettings?.enabled && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
+            )}
+          </button>
+        </div>
+
+        {/* Profile & Account Tab */}
+        {activeTab === 'profile' && (
+          <div className="p-6 space-y-6 overflow-y-auto">
           {/* Avatar Section */}
           <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-xl bg-surface-alt border border-border-main">
             <div className="relative group">
@@ -766,6 +824,256 @@ export default function EditProfileModal({ isOpen, onClose }) {
             </div>
           </div>
         </div>
+        )}
+
+        {/* AI Features Tab */}
+        {activeTab === 'ai' && (
+          <div className="p-6 space-y-5 overflow-y-auto">
+            {/* Master AI Toggle Card */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-surface-alt via-surface to-brand-50/40 border border-border-main space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 shrink-0">
+                    <Sparkles className="w-5 h-5 text-brand-500" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-text-primary">ConnectX AI Assistant</span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          aiSettings?.enabled
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-surface text-text-muted border border-border-main'
+                        }`}
+                      >
+                        {aiSettings?.enabled ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-text-muted mt-0.5">
+                      Master control for translation, smart replies, audio summaries, and reminders
+                    </p>
+                  </div>
+                </div>
+
+                {/* Toggle Switch */}
+                <button
+                  type="button"
+                  disabled={isUpdatingAi}
+                  onClick={async () => {
+                    if (!aiSettings?.enabled) {
+                      setIsOnboardingOpen(true);
+                    } else {
+                      const res = await updateAiSettings({ enabled: false });
+                      if (res.success) {
+                        toast.success('AI features turned off.');
+                      }
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    aiSettings?.enabled ? 'bg-brand-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      aiSettings?.enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-border-main/60 flex items-center justify-between text-[11px] text-text-muted">
+                <span>When enabled, relevant message snippets are processed by Google Gemini.</span>
+                {!aiSettings?.enabled && (
+                  <button
+                    type="button"
+                    onClick={() => setIsOnboardingOpen(true)}
+                    className="text-brand-600 font-semibold hover:underline"
+                  >
+                    Learn more
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {aiSettings?.enabled ? (
+              <div className="space-y-4">
+                {/* Preferred Language */}
+                <div className="p-4 rounded-xl bg-surface-alt border border-border-main space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-brand-500" />
+                      Preferred Language for Translation
+                    </label>
+                    <span className="text-[10px] text-text-muted">Auto-translation target</span>
+                  </div>
+                  <select
+                    value={aiSettings?.preferredLanguage || 'en'}
+                    disabled={isUpdatingAi}
+                    onChange={async (e) => {
+                      const newLang = e.target.value;
+                      const res = await updateAiSettings({ preferredLanguage: newLang });
+                      if (res.success) {
+                        toast.success(`Preferred language updated! 🌐`);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-surface border border-border-main rounded-button text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  >
+                    {(languages?.length > 0 ? languages : [
+                      { code: 'en', name: 'English', nativeName: 'English' },
+                      { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+                      { code: 'mr', name: 'Marathi', nativeName: 'मराठी' },
+                      { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી' },
+                      { code: 'bn', name: 'Bengali', nativeName: 'বাংলা' },
+                      { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்' },
+                      { code: 'te', name: 'Telugu', nativeName: 'తెలుగు' },
+                      { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ' },
+                      { code: 'ml', name: 'Malayalam', nativeName: 'മലയാളം' },
+                      { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ' },
+                      { code: 'ur', name: 'Urdu', nativeName: 'اردو' },
+                      { code: 'es', name: 'Spanish', nativeName: 'Español' },
+                      { code: 'fr', name: 'French', nativeName: 'Français' },
+                      { code: 'de', name: 'German', nativeName: 'Deutsch' },
+                      { code: 'ar', name: 'Arabic', nativeName: 'العربية' },
+                    ]).map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.nativeName} ({l.name})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-text-muted">
+                    Incoming messages in other languages will be translated into this language.
+                  </p>
+                </div>
+
+                {/* Timezone */}
+                <div className="p-4 rounded-xl bg-surface-alt border border-border-main space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-brand-500" />
+                      Reminder Timezone
+                    </label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const local = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+                        const res = await updateAiSettings({ timezone: local });
+                        if (res.success) toast.success(`Timezone set to ${local}`);
+                      }}
+                      className="text-[10px] text-brand-600 font-semibold hover:underline"
+                    >
+                      Use System Timezone
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={aiSettings?.timezone || 'Asia/Kolkata'}
+                    disabled={isUpdatingAi}
+                    onChange={(e) => {
+                      updateAiSettings({ timezone: e.target.value });
+                    }}
+                    placeholder="e.g. Asia/Kolkata, America/New_York"
+                    className="w-full px-3 py-2 text-xs bg-surface border border-border-main rounded-button text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400 font-mono"
+                  />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Asia/Dubai', 'Asia/Singapore'].map((tz) => (
+                      <button
+                        key={tz}
+                        type="button"
+                        onClick={() => updateAiSettings({ timezone: tz })}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                          aiSettings?.timezone === tz
+                            ? 'bg-brand-50 border-brand-300 text-brand-700 font-semibold'
+                            : 'bg-surface border-border-main text-text-muted hover:border-brand-200'
+                        }`}
+                      >
+                        {tz}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Smart Replies Toggle */}
+                <div className="p-4 rounded-xl bg-surface-alt border border-border-main flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-surface border border-border-main flex items-center justify-center text-brand-500 shrink-0">
+                      <MessageSquare className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-text-primary block">Smart Reply Suggestions</span>
+                      <p className="text-[11px] text-text-muted">
+                        Shows 3 short suggested replies above composer in direct chats
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isUpdatingAi}
+                    onClick={async () => {
+                      const res = await updateAiSettings({ smartReplies: !aiSettings?.smartReplies });
+                      if (res.success) toast.success('Smart replies preference saved.');
+                    }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      aiSettings?.smartReplies ? 'bg-brand-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        aiSettings?.smartReplies ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Where your data goes Card */}
+                <div className="p-4 rounded-xl bg-brand-50/50 border border-brand-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h5 className="text-xs font-bold text-brand-900 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-brand-600" />
+                      Where your data goes
+                    </h5>
+                    {providers?.policies?.gemini && (
+                      <a
+                        href={providers.policies.gemini}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-brand-600 font-semibold hover:underline inline-flex items-center gap-1"
+                      >
+                        Google AI Policy <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-secondary leading-relaxed">
+                    AI features run server-side using Google Gemini API. Only necessary snippets (e.g. the message being translated or the voice note being transcribed) are submitted. ConnectX does not share your private chats with third parties.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 rounded-xl bg-surface-alt border border-dashed border-border-main text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-600 mx-auto">
+                  <Sparkles className="w-6 h-6 text-brand-500" />
+                </div>
+                <h4 className="text-sm font-bold text-text-primary">ConnectX AI is currently disabled</h4>
+                <p className="text-xs text-text-muted max-w-sm mx-auto">
+                  Turn on AI to enable live translation in 16 languages, smart reply suggestions, audio summaries, and smart reminders.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsOnboardingOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-button bg-brand-gradient text-white text-xs font-bold shadow-brand hover:opacity-95 transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Explore & Enable AI
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AI Onboarding Sheet Modal */}
+        <AiOnboardingModal
+          isOpen={isOnboardingOpen}
+          onClose={() => setIsOnboardingOpen(false)}
+        />
       </div>
     </div>
   );

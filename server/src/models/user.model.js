@@ -101,6 +101,30 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    aiSettings: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      preferredLanguage: {
+        type: String,
+        default: 'en',
+      },
+      timezone: {
+        type: String,
+        default: 'Asia/Kolkata',
+      },
+      smartReplies: {
+        type: Boolean,
+        default: true,
+      },
+      autoTranslateConversations: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Conversation',
+        },
+      ],
+    },
   },
   {
     timestamps: true,

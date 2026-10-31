@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { loginApi, registerApi, getMeApi, logoutApi } from '../api/auth.api.js';
+import { useAiStore } from './aiStore.js';
 
 const getInitialUser = () => {
   try {
@@ -41,6 +42,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await getMeApi();
       if (res.success && res.data?.user) {
         localStorage.setItem('connectx_user', JSON.stringify(res.data.user));
+        useAiStore.getState().syncFromUser(res.data.user);
         set({
           user: res.data.user,
           isAuthenticated: true,
@@ -136,6 +138,7 @@ export const useAuthStore = create((set, get) => ({
   setSession: (user, token, isNewUser = false) => {
     localStorage.setItem('connectx_token', token);
     localStorage.setItem('connectx_user', JSON.stringify(user));
+    useAiStore.getState().syncFromUser(user);
     set({
       user,
       token,
@@ -153,6 +156,7 @@ export const useAuthStore = create((set, get) => ({
     if (!currentUser) return;
     const updated = { ...currentUser, ...updatedFields };
     localStorage.setItem('connectx_user', JSON.stringify(updated));
+    useAiStore.getState().syncFromUser(updated);
     set({ user: updated });
   },
 

@@ -13,6 +13,7 @@ import userRoutes from './routes/user.routes.js';
 import conversationRoutes from './routes/conversation.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
 
@@ -114,6 +115,7 @@ export const createApp = () => {
   app.use('/api/conversations', conversationRoutes);
   app.use('/api/messages', messageRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/ai', aiRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);

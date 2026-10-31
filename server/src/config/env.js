@@ -42,4 +42,29 @@ export const env = {
   firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
   firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY || '',
   firebaseServiceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || '',
+  // AI Settings & Providers
+  aiProvider: process.env.AI_PROVIDER || 'gemini',
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  aiModel: process.env.AI_MODEL || 'gemini-2.5-flash',
+  aiModelFast: process.env.AI_MODEL_FAST || 'gemini-2.5-flash',
+  aiModelSmart: process.env.AI_MODEL_SMART || 'gemini-2.5-pro',
+  sttProvider: process.env.STT_PROVIDER || 'gemini',
+  sttModel: process.env.STT_MODEL || 'gemini-2.5-flash',
+  sttApiKey: process.env.STT_API_KEY || process.env.GEMINI_API_KEY || '',
+  embeddingProvider: process.env.EMBEDDING_PROVIDER || 'gemini',
+  embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-004',
+  embeddingApiKey: process.env.EMBEDDING_API_KEY || process.env.GEMINI_API_KEY || '',
+  aiRetentionDefaultDays: parseInt(process.env.AI_RETENTION_DEFAULT_DAYS, 10) || 90,
+  providerPolicyUrls: (() => {
+    try {
+      return process.env.PROVIDER_POLICY_URLS
+        ? JSON.parse(process.env.PROVIDER_POLICY_URLS)
+        : {
+            gemini: 'https://ai.google.dev/terms',
+            google: 'https://policies.google.com/privacy',
+          };
+    } catch {
+      return { gemini: 'https://ai.google.dev/terms' };
+    }
+  })(),
 };
