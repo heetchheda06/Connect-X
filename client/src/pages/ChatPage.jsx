@@ -21,6 +21,7 @@ import { useChatStore } from '../store/chatStore.js';
 import { useSocketStore } from '../store/socketStore.js';
 import { useAiStore } from '../store/aiStore.js';
 import { useTranslationStore } from '../store/translationStore.js';
+import { useSmartReplyStore } from '../store/smartReplyStore.js';
 import useSocket from '../hooks/useSocket.js';
 import { createOrGetDirectConversationApi, sendMessageApi } from '../api/chat.api.js';
 import { Waves, MessageSquare } from 'lucide-react';
@@ -67,6 +68,21 @@ export default function ChatPage() {
     }
   }, [totalUnread]);
 
+  // Fetch smart replies when switching active conversation
+  useEffect(() => {
+    if (!activeConversationId) {
+      useSmartReplyStore.getState().clearSuggestions();
+      return;
+    }
+    const currentConv = conversations.find((c) => c._id === activeConversationId);
+    const aiSettings = useAiStore.getState().settings;
+    if (currentConv?.type === 'direct' && aiSettings?.enabled && aiSettings?.smartReplies) {
+      useSmartReplyStore.getState().fetchSmartReplies(activeConversationId);
+    } else {
+      useSmartReplyStore.getState().clearSuggestions();
+    }
+  }, [activeConversationId, conversations]);
+
   // Set up real-time Socket.IO listeners for chat events
   useEffect(() => {
     if (!socket) return;
@@ -93,6 +109,16 @@ export default function ChatPage() {
             targetLang: aiSettings.preferredLanguage || 'en',
           });
         }
+      }
+
+      // Smart Replies: Trigger suggestions if direct chat and enabled
+      if (
+        activeConversationId === conversationId &&
+        message?.sender?._id !== user?._id &&
+        aiSettings?.enabled &&
+        aiSettings?.smartReplies
+      ) {
+        useSmartReplyStore.getState().fetchSmartReplies(conversationId);
       }
     };
 

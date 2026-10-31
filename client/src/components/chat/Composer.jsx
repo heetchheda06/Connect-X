@@ -5,21 +5,48 @@ import {
   Smile, 
   X, 
   FileText, 
-  Loader2 
+  Loader2,
+  Sparkles,
+  Check,
+  RotateCw,
+  Wand2,
+  ArrowRight
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
+import { useAiStore } from '../../store/aiStore.js';
+import { useSmartReplyStore } from '../../store/smartReplyStore.js';
 import { uploadFileApi } from '../../api/upload.api.js';
 import { formatFileSize } from '../../utils/file.js';
 import EmojiPickerPopover from './EmojiPickerPopover.jsx';
 import { toast } from 'react-hot-toast';
 
+const TONE_OPTIONS = [
+  { id: 'polite', label: 'Polite', icon: '🤝', desc: 'Warm, respectful & courteous' },
+  { id: 'shorter', label: 'Shorter', icon: '⚡', desc: 'Concise, essential points only' },
+  { id: 'friendlier', label: 'Friendlier', icon: '😊', desc: 'Warm, upbeat & approachable' },
+  { id: 'professional', label: 'Professional', icon: '💼', desc: 'Crisp & business-appropriate' },
+  { id: 'grammar', label: 'Fix Grammar', icon: '✍️', desc: 'Fix typos, punctuation & errors' },
+  { id: 'clearer', label: 'Make Clearer', icon: '🔍', desc: 'Simplify ambiguous phrasing' },
+];
+
 export default function Composer({ onSendMessage, disabled }) {
   const { activeConversationId, replyingTo, setReplyingTo } = useChatStore();
   const { emitTypingStart, emitTypingStop } = useSocketStore();
+  const { settings: aiSettings } = useAiStore();
+  const {
+    suggestions,
+    isLoadingSuggestions,
+    clearSuggestions,
+    tonePreview,
+    isRewriting,
+    rewriteDraft,
+    clearTonePreview,
+  } = useSmartReplyStore();
 
   const [text, setText] = useState('');
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const [isToneMenuOpen, setIsToneMenuOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
@@ -28,10 +55,42 @@ export default function Composer({ onSendMessage, disabled }) {
   const typingTimerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const toneMenuRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, [activeConversationId]);
+
+  // Click outside to close tone menu
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (toneMenuRef.current && !toneMenuRef.current.contains(e.target)) {
+        setIsToneMenuOpen(false);
+      }
+    };
+    if (isToneMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isToneMenuOpen]);
+
+  // Keyboard shortcut for Tone Preview: Esc to cancel, Ctrl/Cmd+Enter to accept
+  useEffect(() => {
+    const handlePreviewKeyDown = (e) => {
+      if (!tonePreview) return;
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearTonePreview();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleApplyTone();
+      }
+    };
+
+    window.addEventListener('keydown', handlePreviewKeyDown);
+    return () => window.removeEventListener('keydown', handlePreviewKeyDown);
+  }, [tonePreview]);
 
   // Handle file selection (from input, drag-and-drop, or clipboard paste)
   const processSelectedFile = (file) => {
@@ -106,6 +165,11 @@ export default function Composer({ onSendMessage, disabled }) {
     const val = e.target.value;
     setText(val);
 
+    // Rule: Hide smart reply suggestions as soon as user starts typing
+    if (suggestions.length > 0) {
+      clearSuggestions();
+    }
+
     if (!activeConversationId) return;
 
     if (val.trim()) {
@@ -121,6 +185,7 @@ export default function Composer({ onSendMessage, disabled }) {
 
   const handleEmojiSelect = (emoji) => {
     setText((prev) => prev + emoji);
+    if (suggestions.length > 0) clearSuggestions();
     inputRef.current?.focus();
   };
 
@@ -128,6 +193,53 @@ export default function Composer({ onSendMessage, disabled }) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+    }
+  };
+
+  // Apply a smart reply suggestion to the draft input
+  const handleApplySuggestion = (suggestionText) => {
+    setText(suggestionText);
+    clearSuggestions();
+    inputRef.current?.focus();
+  };
+
+  // Toggle or open tone menu
+  const handleToggleToneMenu = () => {
+    if (!aiSettings?.enabled) {
+      toast('Enable AI Features in Settings to use Tone Assist ✨', { icon: '✨' });
+      return;
+    }
+    if (!text.trim()) {
+      toast('Type a draft message first to refine its tone ✨', { icon: '✍️' });
+      return;
+    }
+    setIsToneMenuOpen((prev) => !prev);
+  };
+
+  // Request tone assist rewrite
+  const handleSelectTone = async (toneId) => {
+    setIsToneMenuOpen(false);
+    await rewriteDraft({ text: text.trim(), tone: toneId });
+  };
+
+  // Accept rewritten tone
+  const handleApplyTone = () => {
+    if (tonePreview?.rewritten) {
+      setText(tonePreview.rewritten);
+      clearTonePreview();
+      inputRef.current?.focus();
+      toast.success(`Updated with ${tonePreview.tone} tone! ✨`);
+    }
+  };
+
+  // Retry tone assist with higher temperature
+  const handleRetryTone = async () => {
+    if (tonePreview) {
+      await rewriteDraft({
+        text: tonePreview.original,
+        tone: tonePreview.tone,
+        isRetry: true,
+      });
     }
   };
 
@@ -167,11 +279,13 @@ export default function Composer({ onSendMessage, disabled }) {
         replyTo: replyingTo?._id || null,
       });
 
-      // 3. Reset form
+      // 3. Reset form & AI state
       setText('');
       handleRemoveFile();
       setReplyingTo(null);
       setIsEmojiOpen(false);
+      clearSuggestions();
+      clearTonePreview();
     } catch (err) {
       console.error('Send error:', err);
       toast.error(err.response?.data?.message || err.message || 'Failed to send message');
@@ -181,6 +295,7 @@ export default function Composer({ onSendMessage, disabled }) {
   };
 
   const isUploading = uploadProgress !== null;
+  const showSmartReplies = suggestions && suggestions.length > 0 && !text.trim() && !selectedFile;
 
   return (
     <div
@@ -208,6 +323,103 @@ export default function Composer({ onSendMessage, disabled }) {
         onClose={() => setIsEmojiOpen(false)}
         onEmojiClick={handleEmojiSelect}
       />
+
+      {/* Smart Replies Chips Bar */}
+      {showSmartReplies && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none animate-fade-in">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-full border border-brand-200 shadow-xs flex-shrink-0 select-none">
+            <Sparkles className="w-3 h-3 text-brand-500 fill-brand-500" />
+            AI suggestions
+          </span>
+          {suggestions.map((suggestion, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => handleApplySuggestion(suggestion)}
+              className="inline-flex items-center text-xs font-medium text-brand-800 bg-surface border border-brand-200/90 hover:bg-brand-50 hover:border-brand-300 hover:text-brand-900 px-3 py-1 rounded-full shadow-subtle transition-all flex-shrink-0 active:scale-95"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tone Assist Preview Card */}
+      {tonePreview && (
+        <div className="p-3.5 rounded-2xl bg-surface border border-brand-300 shadow-brand-lg animate-fade-in space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-gradient text-white shadow-xs capitalize">
+                <Sparkles className="w-3 h-3" />
+                {tonePreview.tone} Tone
+              </span>
+              <span className="text-xs text-text-muted">
+                {tonePreview.explanation}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={clearTonePreview}
+              className="p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-surface-alt"
+              title="Cancel (Esc)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-xl bg-surface-alt border border-border-main">
+              <span className="text-[10px] uppercase font-bold text-text-muted block mb-1">
+                Original Draft
+              </span>
+              <p className="text-text-secondary whitespace-pre-wrap break-words">
+                {tonePreview.original}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-brand-50/80 border border-brand-200">
+              <span className="text-[10px] uppercase font-bold text-brand-700 block mb-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-brand-500 fill-brand-500" />
+                Rewritten Version
+              </span>
+              <p className="text-text-primary font-medium whitespace-pre-wrap break-words">
+                {tonePreview.rewritten}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-[10px] text-text-muted hidden sm:inline">
+              Press <kbd className="px-1 py-0.5 rounded bg-surface-alt border font-mono">Esc</kbd> to cancel, <kbd className="px-1 py-0.5 rounded bg-surface-alt border font-mono">Ctrl+Enter</kbd> to accept
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={clearTonePreview}
+                className="px-3 py-1.5 rounded-button text-xs font-semibold text-text-secondary hover:bg-surface-alt transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isRewriting}
+                onClick={handleRetryTone}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-button text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 transition-colors disabled:opacity-50"
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${isRewriting ? 'animate-spin' : ''}`} />
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyTone}
+                className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-button text-xs font-bold text-white bg-brand-gradient hover:shadow-brand transition-all shadow-subtle active:scale-95"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Use this
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reply Quote Preview */}
       {replyingTo && (
@@ -277,7 +489,7 @@ export default function Composer({ onSendMessage, disabled }) {
       )}
 
       {/* Main Composer Row */}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 relative">
         {/* Attachment & Emoji Trigger Buttons */}
         <div className="flex items-center gap-0.5 text-text-muted">
           <button
@@ -303,6 +515,63 @@ export default function Composer({ onSendMessage, disabled }) {
           >
             <Smile className="w-4 h-4" />
           </button>
+
+          {/* Tone Assist Trigger Button */}
+          <div className="relative" ref={toneMenuRef}>
+            <button
+              type="button"
+              onClick={handleToggleToneMenu}
+              disabled={disabled || isRewriting}
+              className={`p-2 rounded-full transition-all ${
+                isToneMenuOpen
+                  ? 'bg-brand-gradient text-white shadow-brand'
+                  : text.trim() && aiSettings?.enabled
+                  ? 'text-brand-600 hover:bg-brand-50 hover:text-brand-700'
+                  : 'hover:bg-surface-alt text-text-muted opacity-80'
+              }`}
+              title="Tone Assist ✨ (Rewrite in polite, shorter, professional & more)"
+            >
+              {isRewriting ? (
+                <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Tone Assist Popover Menu */}
+            {isToneMenuOpen && (
+              <div className="absolute bottom-12 left-0 w-64 bg-surface rounded-2xl border border-brand-200 shadow-brand-lg p-2 z-30 animate-fade-in space-y-1">
+                <div className="px-2.5 py-1.5 border-b border-border-main mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-text-primary">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-500 fill-brand-500" />
+                    Tone Assist
+                  </div>
+                  <p className="text-[10px] text-text-muted">
+                    Refine your draft before sending
+                  </p>
+                </div>
+
+                {TONE_OPTIONS.map((tone) => (
+                  <button
+                    key={tone.id}
+                    type="button"
+                    onClick={() => handleSelectTone(tone.id)}
+                    className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-brand-50/80 transition-colors flex items-center gap-2.5 group"
+                  >
+                    <span className="text-base flex-shrink-0">{tone.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-text-primary group-hover:text-brand-700">
+                        {tone.label}
+                      </p>
+                      <p className="text-[10px] text-text-muted truncate">
+                        {tone.desc}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Input Bar */}

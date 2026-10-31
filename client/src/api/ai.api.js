@@ -49,3 +49,20 @@ export const translateBatchApi = async ({ messageIds, targetLang }) => {
   return response.data;
 };
 
+/**
+ * Fetch contextual smart replies for direct conversation
+ */
+export const getSmartRepliesApi = async ({ conversationId }) => {
+  const response = await api.post('/ai/smart-replies', { conversationId });
+  return response.data;
+};
+
+/**
+ * Rewrite a draft message with Tone Assist
+ */
+export const rewriteDraftApi = async ({ text, tone, isRetry = false }) => {
+  const response = await api.post('/ai/rewrite', { text, tone, isRetry });
+  return response.data;
+};
+
+

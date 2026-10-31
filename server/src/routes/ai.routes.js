@@ -6,9 +6,16 @@ import {
   getAiProviders,
   translateMessage,
   translateBatch,
+  getSmartReplies,
+  rewriteDraft,
 } from '../controllers/ai.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
-import { generalAiLimiter, translateLimiter } from '../middleware/aiRateLimiter.js';
+import {
+  generalAiLimiter,
+  translateLimiter,
+  smartRepliesLimiter,
+  toneLimiter,
+} from '../middleware/aiRateLimiter.js';
 
 const router = express.Router();
 
@@ -24,6 +31,10 @@ router.put('/settings', generalAiLimiter, updateAiSettings);
 // Translation routes
 router.post('/translate', translateLimiter, translateMessage);
 router.post('/translate/batch', translateLimiter, translateBatch);
+
+// Smart replies & Tone assist routes
+router.post('/smart-replies', smartRepliesLimiter, getSmartReplies);
+router.post('/rewrite', toneLimiter, rewriteDraft);
 
 export default router;
 

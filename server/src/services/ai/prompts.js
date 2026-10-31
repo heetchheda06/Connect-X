@@ -95,7 +95,8 @@ RULES:
 3. Do not add fictitious information.
 4. Return JSON matching the schema:
    {
-     "rewritten": string
+     "rewritten": string,
+     "explanation": string
    }
 ${PROMPT_INJECTION_DEFENSE}
 `;

@@ -1,6 +1,7 @@
 import User from '../models/user.model.js';
 import { SUPPORTED_LANGUAGES, isValidTargetLanguage } from '../services/ai/languages.js';
 import { translationService } from '../services/ai/translationService.js';
+import { smartReplyService } from '../services/ai/smartReplyService.js';
 import { env } from '../config/env.js';
 
 /**
@@ -173,4 +174,59 @@ export const translateBatch = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Generate contextual smart replies for a direct conversation
+ * POST /api/ai/smart-replies
+ */
+export const getSmartReplies = async (req, res, next) => {
+  try {
+    const { conversationId } = req.body;
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'conversationId is required',
+        data: { suggestions: [] },
+      });
+    }
+
+    const result = await smartReplyService.generateSmartReplies({
+      conversationId,
+      userId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Smart replies generated',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Rewrite a message draft with tone assist
+ * POST /api/ai/rewrite
+ */
+export const rewriteDraft = async (req, res, next) => {
+  try {
+    const { text, tone, isRetry } = req.body;
+    const result = await smartReplyService.rewriteTone({
+      text,
+      tone,
+      userId: req.user._id,
+      isRetry: Boolean(isRetry),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Draft rewritten successfully',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
