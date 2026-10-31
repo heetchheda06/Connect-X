@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatMessageTime } from '../../utils/date.js';
-import { formatFileSize, isImageFile } from '../../utils/file.js';
+import { formatFileSize, isImageFile, getMediaUrl } from '../../utils/file.js';
 import { 
   Check, 
   CheckCheck, 
@@ -99,9 +99,9 @@ export default function MessageBubble({
             {hasImage && (
               <div className="mb-2 overflow-hidden rounded-xl bg-deep-900/10 border border-black/5">
                 <img
-                  src={attachment.url}
+                  src={getMediaUrl(attachment.url)}
                   alt={attachment.name || 'Shared image'}
-                  onClick={() => onImageClick && onImageClick(attachment)}
+                  onClick={() => onImageClick && onImageClick({ ...attachment, url: getMediaUrl(attachment.url) })}
                   className="max-h-72 w-full object-cover rounded-xl cursor-pointer hover:opacity-95 transition-opacity"
                   loading="lazy"
                 />
@@ -132,7 +132,7 @@ export default function MessageBubble({
                 </div>
 
                 <a
-                  href={attachment.url}
+                  href={getMediaUrl(attachment.url)}
                   download={attachment.name}
                   target="_blank"
                   rel="noopener noreferrer"

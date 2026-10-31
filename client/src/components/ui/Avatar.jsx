@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getAvatarPalette, getInitials } from '../../utils/avatar.js';
+import { getMediaUrl } from '../../utils/file.js';
 
 export default function Avatar({
   src,
@@ -41,7 +42,7 @@ export default function Avatar({
     <div className={`relative inline-flex flex-shrink-0 select-none ${className}`}>
       {hasValidImage ? (
         <img
-          src={src}
+          src={getMediaUrl(src)}
           alt={name || 'User avatar'}
           onError={() => setImageError(true)}
           className={`${dimensionClass} rounded-full object-cover shadow-subtle border border-border-main`}

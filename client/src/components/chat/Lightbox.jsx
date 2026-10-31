@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X, Download, ZoomIn, FileImage } from 'lucide-react';
+import { getMediaUrl } from '../../utils/file.js';
 
 export default function Lightbox({ image, onClose }) {
   useEffect(() => {
@@ -21,8 +22,9 @@ export default function Lightbox({ image, onClose }) {
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = image.url;
+    a.href = getMediaUrl(image.url);
     a.download = image.name || 'connectx-image';
+    a.target = '_blank';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -69,7 +71,7 @@ export default function Lightbox({ image, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={image.url}
+          src={getMediaUrl(image.url)}
           alt={image.name || 'Preview'}
           className="max-w-full max-h-[85dvh] object-contain rounded-2xl shadow-2xl transition-transform"
         />

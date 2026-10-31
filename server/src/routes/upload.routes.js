@@ -64,6 +64,9 @@ router.post(
 
       const fileUrl = storageService.getFileUrl(req.file.filename);
 
+      // Persist to MongoDB GridFS so files survive Render restarts
+      await storageService.persistToGridFS(req.file.filename, req.file.mimetype);
+
       return res.status(200).json({
         success: true,
         message: 'File uploaded successfully',

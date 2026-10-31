@@ -150,6 +150,9 @@ export const uploadAvatar = async (req, res, next) => {
 
     const avatarUrl = storageService.getFileUrl(req.file.filename);
 
+    // Persist to MongoDB GridFS so avatars survive Render restarts
+    await storageService.persistToGridFS(req.file.filename, req.file.mimetype);
+
     // If user previously had a local avatar, delete it to keep storage clean
     if (req.user.avatar && req.user.avatar.startsWith('/uploads/')) {
       await storageService.deleteFile(req.user.avatar);

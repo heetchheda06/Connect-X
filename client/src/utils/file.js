@@ -23,3 +23,28 @@ export const isImageFile = (mimeType = '', filename = '') => {
   return imageExtensions.some((ext) => filename.toLowerCase().endsWith(ext));
 };
 
+/**
+ * Resolves a media / attachment / avatar URL.
+ * If the URL is relative (e.g. starts with '/uploads/'), prepends the server backend origin.
+ * If the URL is already absolute (starts with 'http', 'https', 'data', 'blob'), returns it unchanged.
+ * @param {string} url 
+ * @returns {string}
+ */
+export const getMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  if (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:')
+  ) {
+    return url;
+  }
+
+  const backendBase =
+    import.meta.env.VITE_SOCKET_URL ||
+    (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '');
+
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${backendBase}${cleanPath}`;
+};
