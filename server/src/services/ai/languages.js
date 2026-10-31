@@ -30,3 +30,4 @@ export const isValidTargetLanguage = (code) => {
   const lang = getLanguageByCode(code);
   return Boolean(lang && lang.isTarget);
 };
+

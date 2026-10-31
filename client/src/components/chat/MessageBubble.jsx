@@ -1,6 +1,8 @@
 import React from 'react';
 import { formatMessageTime } from '../../utils/date.js';
 import { formatFileSize, isImageFile, getMediaUrl } from '../../utils/file.js';
+import { useAiStore } from '../../store/aiStore.js';
+import { useTranslationStore } from '../../store/translationStore.js';
 import { 
   Check, 
   CheckCheck, 
@@ -12,7 +14,11 @@ import {
   FileArchive, 
   FileSpreadsheet, 
   FileCode,
-  Info 
+  Info,
+  Languages,
+  Sparkles,
+  Loader2,
+  RotateCw
 } from 'lucide-react';
 
 export default function MessageBubble({
@@ -31,6 +37,32 @@ export default function MessageBubble({
   const attachment = message.attachment;
   const hasImage = attachment && isImageFile(attachment.mimeType, attachment.name);
   const hasFile = attachment && !hasImage;
+
+  const { settings: aiSettings, languages } = useAiStore();
+  const { 
+    getTranslation, 
+    isTranslating, 
+    getError, 
+    toggleShowOriginal, 
+    translateMessage 
+  } = useTranslationStore();
+
+  const translation = getTranslation(message._id);
+  const isTranslatingMessage = isTranslating(message._id);
+  const translationError = getError(message._id);
+
+  const preferredLang = aiSettings?.preferredLanguage || 'en';
+  const targetLangObj = languages.find((l) => l.code === preferredLang);
+  const targetLangLabel = targetLangObj?.name || 'English';
+
+  const canTranslate = !isDeleted && message.content && aiSettings?.enabled;
+
+  const handleManualTranslate = () => {
+    translateMessage({
+      messageId: message._id,
+      targetLang: preferredLang,
+    });
+  };
 
   const getFileIcon = (filename = '', mime = '') => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -154,6 +186,75 @@ export default function MessageBubble({
                 {message.content}
               </p>
             )}
+
+            {/* AI Live Translation Tinted Block */}
+            {(translation || isTranslatingMessage || translationError) && (
+              <div className="mt-2.5 pt-2 border-t border-brand-200/40 text-left">
+                <div
+                  className={`rounded-xl p-2.5 shadow-subtle text-xs space-y-1.5 ${
+                    isOwn
+                      ? 'bg-white/15 text-white border border-white/25'
+                      : 'bg-brand-50/90 text-text-primary border border-brand-200/80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-xs ${
+                        isOwn
+                          ? 'bg-white/20 text-white border-white/30'
+                          : 'bg-white text-brand-700 border-brand-200'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3 text-brand-500 fill-brand-500" />
+                      AI Translated · {targetLangLabel}
+                    </span>
+
+                    {translation && !isTranslatingMessage && (
+                      <button
+                        type="button"
+                        onClick={() => toggleShowOriginal(message._id)}
+                        className={`text-[10px] font-semibold underline transition-opacity hover:opacity-80 ${
+                          isOwn ? 'text-white' : 'text-brand-600'
+                        }`}
+                      >
+                        {translation.showOriginal ? 'Show translation' : 'Show original'}
+                      </button>
+                    )}
+                  </div>
+
+                  {isTranslatingMessage ? (
+                    <div className="flex items-center gap-1.5 py-1 text-[11px] animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
+                      <span>Translating to {targetLangLabel}...</span>
+                    </div>
+                  ) : translationError ? (
+                    <div className="flex items-center justify-between text-[11px] py-0.5">
+                      <span className={isOwn ? 'text-white/80' : 'text-status-danger'}>
+                        {translationError}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleManualTranslate}
+                        className="inline-flex items-center gap-1 font-semibold underline ml-2"
+                      >
+                        <RotateCw className="w-3 h-3" /> Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
+                        {translation.showOriginal ? message.content : translation.translatedText}
+                      </p>
+                      {translation.alreadyInTargetLang && !translation.showOriginal && (
+                        <span className="text-[10px] opacity-75 italic block mt-1">
+                          (Message is already in {targetLangLabel})
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -189,9 +290,18 @@ export default function MessageBubble({
       {!isDeleted && (
         <div
           className={`absolute top-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 p-1 rounded-full bg-surface/90 backdrop-blur-sm border border-border-main shadow-subtle z-10 ${
-            isOwn ? '-left-24' : '-right-24'
+            isOwn ? '-left-28' : '-right-28'
           }`}
         >
+          {canTranslate && (
+            <button
+              onClick={handleManualTranslate}
+              className="p-1 rounded-full hover:bg-brand-50 text-text-muted hover:text-brand-600 transition-colors"
+              title={`Translate to ${targetLangLabel}`}
+            >
+              <Languages className="w-3.5 h-3.5 text-brand-500" />
+            </button>
+          )}
           {onInfo && (
             <button
               onClick={() => onInfo(message)}

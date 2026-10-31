@@ -1,5 +1,6 @@
 import User from '../models/user.model.js';
 import { SUPPORTED_LANGUAGES, isValidTargetLanguage } from '../services/ai/languages.js';
+import { translationService } from '../services/ai/translationService.js';
 import { env } from '../config/env.js';
 
 /**
@@ -126,3 +127,50 @@ export const getAiProviders = (req, res) => {
     },
   });
 };
+
+/**
+ * Translate a single message
+ * POST /api/ai/translate
+ */
+export const translateMessage = async (req, res, next) => {
+  try {
+    const { messageId, targetLang } = req.body;
+    const result = await translationService.translateMessage({
+      messageId,
+      targetLang,
+      userId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Translation completed',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Batch translate visible messages in a conversation
+ * POST /api/ai/translate/batch
+ */
+export const translateBatch = async (req, res, next) => {
+  try {
+    const { messageIds, targetLang } = req.body;
+    const result = await translationService.translateBatch({
+      messageIds,
+      targetLang,
+      userId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Batch translation completed',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

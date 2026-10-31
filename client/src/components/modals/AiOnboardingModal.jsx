@@ -141,3 +141,4 @@ export default function AiOnboardingModal({ isOpen, onClose, onConfirm }) {
     </div>
   );
 }
+

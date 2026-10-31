@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
+import Translation from '../models/translation.model.js';
 
 /**
  * Get paginated messages for a conversation
@@ -311,6 +312,9 @@ export const deleteMessage = async (req, res, next) => {
       message.content = '🚫 This message was deleted';
       message.attachment = null;
       await message.save();
+
+      // Clean up any cached translations for deleted message
+      await Translation.deleteMany({ message: message._id }).catch(() => {});
 
       const io = req.app.get('io');
       if (io) {

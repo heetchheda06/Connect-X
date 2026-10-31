@@ -19,6 +19,8 @@ import ReconnectingBanner from '../components/layout/ReconnectingBanner.jsx';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useSocketStore } from '../store/socketStore.js';
+import { useAiStore } from '../store/aiStore.js';
+import { useTranslationStore } from '../store/translationStore.js';
 import useSocket from '../hooks/useSocket.js';
 import { createOrGetDirectConversationApi, sendMessageApi } from '../api/chat.api.js';
 import { Waves, MessageSquare } from 'lucide-react';
@@ -74,6 +76,24 @@ export default function ChatPage() {
       if (activeConversationId === conversationId && message.sender?._id !== user?._id) {
         emitMessageRead(conversationId);
       }
+
+      // Live Translation: Check if auto-translate is on for this conversation
+      const aiSettings = useAiStore.getState().settings;
+      if (
+        aiSettings?.enabled &&
+        message?.content &&
+        message?.sender?._id !== user?._id &&
+        !message?.isDeletedForEveryone &&
+        message?.type !== 'system'
+      ) {
+        const autoTranslateList = (aiSettings.autoTranslateConversations || []).map((id) => (id?._id || id)?.toString());
+        if (autoTranslateList.includes(conversationId?.toString())) {
+          useTranslationStore.getState().translateMessage({
+            messageId: message._id,
+            targetLang: aiSettings.preferredLanguage || 'en',
+          });
+        }
+      }
     };
 
     const onRead = ({ conversationId, userId: readerId, readAt }) => {
@@ -82,6 +102,7 @@ export default function ChatPage() {
 
     const onDeleted = ({ conversationId, messageId }) => {
       handleMessageDeleted(conversationId, messageId);
+      useTranslationStore.getState().clearTranslation(messageId);
     };
 
     socket.on('message:new', onNewMessage);
@@ -94,6 +115,27 @@ export default function ChatPage() {
       socket.off('message:deleted', onDeleted);
     };
   }, [socket, activeConversationId, user?._id, handleIncomingMessage, handleMessageRead, handleMessageDeleted, emitMessageRead]);
+
+  // When active conversation opens, auto-translate visible text messages if auto-translate is on
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const aiSettings = useAiStore.getState().settings;
+    if (!aiSettings?.enabled) return;
+
+    const autoTranslateList = (aiSettings.autoTranslateConversations || []).map((id) => (id?._id || id)?.toString());
+    if (autoTranslateList.includes(activeConversationId.toString())) {
+      const convMessages = messagesByConv[activeConversationId] || [];
+      const textIds = convMessages
+        .filter((m) => m.content && !m.isDeletedForEveryone && m.type !== 'system')
+        .map((m) => m._id);
+      if (textIds.length > 0) {
+        useTranslationStore.getState().translateBatch({
+          messageIds: textIds,
+          targetLang: aiSettings.preferredLanguage || 'en',
+        });
+      }
+    }
+  }, [activeConversationId, messagesByConv]);
 
   // Handle starting a conversation from search modal
   const handleSelectUserToChat = async (targetUser) => {

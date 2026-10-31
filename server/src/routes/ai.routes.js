@@ -4,9 +4,11 @@ import {
   updateAiSettings,
   getSupportedLanguages,
   getAiProviders,
+  translateMessage,
+  translateBatch,
 } from '../controllers/ai.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
-import { generalAiLimiter } from '../middleware/aiRateLimiter.js';
+import { generalAiLimiter, translateLimiter } from '../middleware/aiRateLimiter.js';
 
 const router = express.Router();
 
@@ -14,9 +16,14 @@ const router = express.Router();
 router.get('/languages', getSupportedLanguages);
 router.get('/providers', getAiProviders);
 
-// Protected user AI settings
+// Protected routes
 router.use(protect);
 router.get('/settings', getAiSettings);
 router.put('/settings', generalAiLimiter, updateAiSettings);
 
+// Translation routes
+router.post('/translate', translateLimiter, translateMessage);
+router.post('/translate/batch', translateLimiter, translateBatch);
+
 export default router;
+

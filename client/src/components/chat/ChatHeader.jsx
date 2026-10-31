@@ -1,8 +1,11 @@
 import React from 'react';
-import { ArrowLeft, PanelRight, MoreVertical, Search } from 'lucide-react';
+import { ArrowLeft, PanelRight, MoreVertical, Search, Languages, Sparkles } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import Avatar from '../ui/Avatar.jsx';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
+import { useAiStore } from '../../store/aiStore.js';
+import { useTranslationStore } from '../../store/translationStore.js';
 
 export default function ChatHeader({
   conversation,
@@ -11,6 +14,46 @@ export default function ChatHeader({
 }) {
   const { toggleInfoDrawer, infoDrawerOpen } = useChatStore();
   const { typingUsers } = useSocketStore();
+  const { settings: aiSettings, updateSettings: updateAiSettings, languages } = useAiStore();
+  const { translateBatch } = useTranslationStore();
+  const messages = useChatStore((state) => state.messages[conversation._id] || []);
+
+  const autoTranslateList = aiSettings?.autoTranslateConversations || [];
+  const isAutoTranslateOn = autoTranslateList.some(
+    (id) => (id?._id || id)?.toString() === conversation._id?.toString()
+  );
+
+  const preferredLangObj = languages.find((l) => l.code === (aiSettings?.preferredLanguage || 'en'));
+  const preferredLangName = preferredLangObj?.name || 'English';
+
+  const handleToggleAutoTranslate = async () => {
+    if (!aiSettings?.enabled) {
+      toast.error('Please enable ConnectX AI in Settings first.');
+      return;
+    }
+
+    const currentList = (aiSettings?.autoTranslateConversations || []).map((id) => (id?._id || id)?.toString());
+    const convIdStr = conversation._id?.toString();
+
+    let nextList;
+    if (isAutoTranslateOn) {
+      nextList = currentList.filter((id) => id !== convIdStr);
+      toast('Auto-translation disabled for this chat');
+    } else {
+      nextList = [...currentList, convIdStr];
+      toast.success(`Auto-translating incoming messages to ${preferredLangName} ✨`);
+
+      // Translate currently visible text messages
+      const textMessageIds = messages
+        .filter((m) => m.content && !m.isDeletedForEveryone && m.type !== 'system')
+        .map((m) => m._id);
+      if (textMessageIds.length > 0) {
+        translateBatch({ messageIds: textMessageIds, targetLang: aiSettings?.preferredLanguage || 'en' });
+      }
+    }
+
+    await updateAiSettings({ autoTranslateConversations: nextList });
+  };
 
   const isDirect = conversation.type === 'direct';
   const otherMember = isDirect
@@ -73,7 +116,30 @@ export default function ChatHeader({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-1 text-text-secondary">
+      <div className="flex items-center gap-2 text-text-secondary">
+        {/* Auto-Translate Toggle Button if AI is enabled */}
+        {aiSettings?.enabled && (
+          <button
+            type="button"
+            onClick={handleToggleAutoTranslate}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all border ${
+              isAutoTranslateOn
+                ? 'bg-brand-50 text-brand-700 border-brand-300 font-semibold shadow-xs'
+                : 'bg-surface text-text-muted hover:text-text-primary border-border-main hover:border-brand-200'
+            }`}
+            title={
+              isAutoTranslateOn
+                ? `Auto-translate is ON (${preferredLangName}). Click to turn off.`
+                : `Turn on auto-translate to ${preferredLangName}`
+            }
+          >
+            <Languages className={`w-3.5 h-3.5 ${isAutoTranslateOn ? 'text-brand-500' : 'text-text-muted'}`} />
+            <span className="text-[11px]">
+              {isAutoTranslateOn ? `Translating → ${preferredLangName}` : `Translate → ${preferredLangName}`}
+            </span>
+          </button>
+        )}
+
         <button
           onClick={toggleInfoDrawer}
           className={`p-2 rounded-xl transition-colors ${

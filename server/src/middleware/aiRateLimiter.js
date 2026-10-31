@@ -37,3 +37,4 @@ export const reminderParseLimiter = createAiLimiter(60 * 60 * 1000, 40, 'Reminde
 
 // 60 general AI calls per hour per user
 export const generalAiLimiter = createAiLimiter(60 * 60 * 1000, 60, 'AI Service');
+
