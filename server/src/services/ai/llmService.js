@@ -99,10 +99,34 @@ class LlmService {
   cleanJsonResponse(text) {
     if (!text || typeof text !== 'string') return '';
     let cleaned = text.trim();
-    if (cleaned.startsWith('```json')) {
+
+    // 1. Strip markdown fences if present anywhere in text
+    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch) {
+      cleaned = fenceMatch[1].trim();
+    } else if (cleaned.startsWith('```json')) {
       cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
     } else if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    // 2. If text has leading or trailing non-JSON characters, extract outermost JSON structure
+    if (!cleaned.startsWith('{') && !cleaned.startsWith('[')) {
+      const startObj = cleaned.indexOf('{');
+      const startArr = cleaned.indexOf('[');
+      let startIdx = -1;
+      if (startObj !== -1 && startArr !== -1) {
+        startIdx = Math.min(startObj, startArr);
+      } else {
+        startIdx = Math.max(startObj, startArr);
+      }
+      if (startIdx !== -1) {
+        const isObj = cleaned[startIdx] === '{';
+        const endIdx = isObj ? cleaned.lastIndexOf('}') : cleaned.lastIndexOf(']');
+        if (endIdx !== -1 && endIdx > startIdx) {
+          cleaned = cleaned.substring(startIdx, endIdx + 1);
+        }
+      }
     }
     return cleaned.trim();
   }
@@ -308,6 +332,7 @@ class LlmService {
         const tokens = response.usageMetadata?.totalTokenCount || 0;
         console.log(`[AI Audit] Feature: ${feature} | Model: ${model} | Latency: ${latencyMs}ms | Tokens: ${tokens} | Status: SUCCESS`);
         return {
+          ...(typeof validation.data === 'object' ? validation.data : {}),
           data: validation.data,
           tokens,
           latencyMs,
@@ -321,22 +346,49 @@ class LlmService {
       const correctedPrompt = `${prompt}\n\nIMPORTANT: Output strictly valid JSON matching the required schema. No explanations, no markdown fences.`;
       const retryResponse = await runCall(correctedPrompt);
       const retryRaw = retryResponse.text || retryResponse.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      const retryJson = JSON.parse(this.cleanJsonResponse(retryRaw));
-
-      const retryValidation = schema.safeParse(retryJson);
-      if (retryValidation.success) {
-        const latencyMs = Date.now() - startTime;
-        const tokens = (response.usageMetadata?.totalTokenCount || 0) + (retryResponse.usageMetadata?.totalTokenCount || 0);
-        console.log(`[AI Audit] Feature: ${feature} (retry) | Model: ${model} | Latency: ${latencyMs}ms | Tokens: ${tokens} | Status: SUCCESS`);
-        return {
-          data: retryValidation.data,
-          tokens,
-          latencyMs,
-        };
-      } else {
-        throw new Error('AI output did not match expected structure after retry.');
+      let retryJson = null;
+      try {
+        retryJson = JSON.parse(this.cleanJsonResponse(retryRaw));
+      } catch {
+        retryJson = null;
       }
+
+      if (retryJson && schema) {
+        const retryValidation = schema.safeParse(retryJson);
+        if (retryValidation.success) {
+          const latencyMs = Date.now() - startTime;
+          const tokens = (response.usageMetadata?.totalTokenCount || 0) + (retryResponse.usageMetadata?.totalTokenCount || 0);
+          console.log(`[AI Audit] Feature: ${feature} (retry) | Model: ${model} | Latency: ${latencyMs}ms | Tokens: ${tokens} | Status: SUCCESS`);
+          return {
+            ...(typeof retryValidation.data === 'object' ? retryValidation.data : {}),
+            data: retryValidation.data,
+            tokens,
+            latencyMs,
+          };
+        }
+      }
+
+      const fallbackObj = retryJson || parsedJson;
+      if (fallbackObj && typeof fallbackObj === 'object') {
+        console.warn(`[LlmService Warning] Output validation mismatch for ${feature}, salvaging parsed JSON object.`);
+        return {
+          ...fallbackObj,
+          data: fallbackObj,
+          tokens: (response.usageMetadata?.totalTokenCount || 0) + (retryResponse?.usageMetadata?.totalTokenCount || 0),
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
+      throw new Error('AI output did not match expected structure after retry.');
     } catch (retryErr) {
+      if (parsedJson && typeof parsedJson === 'object') {
+        return {
+          ...parsedJson,
+          data: parsedJson,
+          tokens: response.usageMetadata?.totalTokenCount || 0,
+          latencyMs: Date.now() - startTime,
+        };
+      }
       const formatted = this.formatError(retryErr);
       const latencyMs = Date.now() - startTime;
       console.error(`[AI Audit] Feature: ${feature} (retry failed) | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${formatted.message}`);

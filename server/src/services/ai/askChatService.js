@@ -6,20 +6,51 @@ import { llmService } from './llmService.js';
 import { PROMPT_INJECTION_DEFENSE } from './prompts.js';
 import { env } from '../../config/env.js';
 
-const askChatOutputSchema = z.object({
-  answer: z.string(),
-  citations: z
-    .array(
-      z.object({
-        messageId: z.string(),
-        sender: z.string().default(''),
-        textSnippet: z.string().default(''),
+const askChatOutputSchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === 'object') {
+      const copy = { ...val };
+      if (!copy.answer && (copy.response || copy.text || copy.reply || copy.message)) {
+        copy.answer = copy.response || copy.text || copy.reply || copy.message;
+      }
+      return copy;
+    }
+    return val;
+  },
+  z.object({
+    answer: z.string().default(''),
+    citations: z
+      .any()
+      .transform((val) => {
+        if (!Array.isArray(val)) return [];
+        return val
+          .map((item) => {
+            if (!item) return null;
+            if (typeof item === 'string') return { messageId: item, sender: '', textSnippet: '' };
+            return {
+              messageId: String(item.messageId || item.id || item._id || ''),
+              sender: String(item.sender || ''),
+              textSnippet: String(item.textSnippet || item.snippet || item.text || ''),
+            };
+          })
+          .filter(Boolean);
       })
-    )
-    .default([]),
-  confidence: z.number().min(0).max(1).default(0.8),
-  notFound: z.boolean().default(false),
-});
+      .default([]),
+    confidence: z
+      .any()
+      .transform((val) => {
+        const num = Number(val);
+        if (isNaN(num)) return 0.8;
+        if (num > 1) return Math.min(num / 100, 1);
+        return Math.max(0, num);
+      })
+      .default(0.8),
+    notFound: z
+      .any()
+      .transform((val) => Boolean(val))
+      .default(false),
+  })
+);
 
 const ASK_CHAT_PROMPT = `
 You are ConnectX "Ask This Chat" assistant.
@@ -28,10 +59,26 @@ Your task is to answer the user's question STRICTLY AND SOLELY using the convers
 RULES:
 1. Answer concisely, accurately, and naturally.
 2. CITATIONS: Include citation references for every fact cited in the answer. Use the source message IDs provided.
-3. If the answer is NOT present in the conversation, set "notFound": true, set "answer" to "I couldn't find that in this chat.", and provide an empty citations array.
-4. Never guess or hallucinate outside information.
-5. Paraphrase appropriately; do not quote full messages verbatim.
-6. Output strict JSON matching the schema.
+3. If the user greeting is conversational (e.g. "hello", "hi"), respond warmly with:
+   "answer": "Hello! I am your ConnectX chat assistant. Ask me anything about this conversation.",
+   "citations": [],
+   "notFound": false
+4. If the answer is NOT present in the conversation, set "notFound": true, set "answer" to "I couldn't find that in this chat.", and provide an empty citations array.
+5. Never guess or hallucinate outside information.
+6. Paraphrase appropriately; do not quote full messages verbatim.
+7. Output strict JSON matching this exact structure:
+{
+  "answer": "Your direct answer here",
+  "citations": [
+    {
+      "messageId": "source_message_id",
+      "sender": "sender_name",
+      "textSnippet": "short snippet from message"
+    }
+  ],
+  "confidence": 0.9,
+  "notFound": false
+}
 ${PROMPT_INJECTION_DEFENSE}
 `;
 
@@ -92,8 +139,17 @@ Search the chat history in <chat_data> and answer the question with precise cita
       modelTier: env.aiModelSmart || env.aiModel,
     });
 
+    const answer = result?.answer || result?.data?.answer || "I couldn't find that in this chat.";
+    const citations = Array.isArray(result?.citations)
+      ? result.citations
+      : Array.isArray(result?.data?.citations)
+      ? result.data.citations
+      : [];
+    const confidence = typeof result?.confidence === 'number' ? result.confidence : 0.8;
+    const notFound = Boolean(result?.notFound);
+
     // 4. Append to thread
-    const citationIds = (result.citations || [])
+    const citationIds = citations
       .map((c) => c.messageId)
       .filter((id) => id && id.length === 24);
 
@@ -105,7 +161,7 @@ Search the chat history in <chat_data> and answer the question with precise cita
 
     thread.messages.push({
       role: 'model',
-      content: result.answer,
+      content: answer,
       citations: citationIds,
     });
 
@@ -113,10 +169,10 @@ Search the chat history in <chat_data> and answer the question with precise cita
 
     return {
       threadId: thread._id,
-      answer: result.answer,
-      citations: result.citations,
-      confidence: result.confidence,
-      notFound: result.notFound,
+      answer,
+      citations,
+      confidence,
+      notFound,
       hiddenNotice: context.notice,
     };
   }
