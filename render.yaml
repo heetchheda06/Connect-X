@@ -21,4 +21,22 @@ services:
         sync: false
       - key: FIREBASE_PROJECT_ID
         value: connect-x-1af38
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gemini-2.5-flash
+      - key: AI_MODEL_FAST
+        value: gemini-2.5-flash
+      - key: AI_MODEL_SMART
+        value: gemini-2.5-flash
+      - key: STT_PROVIDER
+        value: gemini
+      - key: STT_MODEL
+        value: gemini-2.5-flash
+      - key: EMBEDDING_PROVIDER
+        value: gemini
+      - key: EMBEDDING_MODEL
+        value: text-embedding-004
 

@@ -25,11 +25,59 @@ class LlmService {
    */
   getClient() {
     const currentKey = env.geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!this.client && currentKey) {
+    if (currentKey && (!this.client || this.apiKey !== currentKey)) {
       this.apiKey = currentKey;
       this.client = new GoogleGenAI({ apiKey: currentKey });
     }
     return this.client;
+  }
+
+  /**
+   * Format and normalize error messages from LLM / Gemini API
+   */
+  formatError(err) {
+    if (!err) return new Error('Unknown AI error');
+
+    const rawMsg = err.message || '';
+    const isRateLimit =
+      err.status === 429 ||
+      err.statusCode === 429 ||
+      rawMsg.includes('429') ||
+      rawMsg.includes('RESOURCE_EXHAUSTED') ||
+      rawMsg.includes('Quota exceeded') ||
+      rawMsg.includes('rate limit');
+
+    if (isRateLimit) {
+      const quotaErr = new Error('Gemini API rate limit reached (Free tier allows 5 requests/min). Please wait 30 seconds and try again.');
+      quotaErr.statusCode = 429;
+      quotaErr.code = 'AI_RATE_LIMIT';
+      return quotaErr;
+    }
+
+    if (rawMsg.includes('SAFETY') || err.code === 'AI_SAFETY_BLOCKED') {
+      const safetyErr = new Error('This content was flagged by AI safety filters and cannot be processed.');
+      safetyErr.statusCode = 400;
+      safetyErr.code = 'AI_SAFETY_BLOCKED';
+      return safetyErr;
+    }
+
+    if (err.code === 'AI_NOT_CONFIGURED') {
+      err.statusCode = 503;
+      return err;
+    }
+
+    try {
+      if (rawMsg.startsWith('{')) {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed?.error?.message) {
+          const cleanErr = new Error(parsed.error.message);
+          cleanErr.statusCode = parsed.error.code || 500;
+          return cleanErr;
+        }
+      }
+    } catch (_) {}
+
+    return err;
   }
 
   /**
@@ -39,7 +87,7 @@ class LlmService {
    */
   resolveModel(tier = 'default') {
     if (tier === 'fast') return env.aiModelFast || 'gemini-2.5-flash';
-    if (tier === 'smart') return env.aiModelSmart || 'gemini-2.5-pro';
+    if (tier === 'smart') return env.aiModelSmart || 'gemini-2.5-flash';
     return env.aiModel || 'gemini-2.5-flash';
   }
 
@@ -172,9 +220,10 @@ class LlmService {
         latencyMs,
       };
     } catch (err) {
+      const formatted = this.formatError(err);
       const latencyMs = Date.now() - startTime;
-      console.error(`[AI Audit] Feature: ${feature} | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${err.message}`);
-      throw err;
+      console.error(`[AI Audit] Feature: ${feature} | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${formatted.message}`);
+      throw formatted;
     }
   }
 
@@ -228,9 +277,10 @@ class LlmService {
     try {
       response = await runCall();
     } catch (err) {
+      const formatted = this.formatError(err);
       const latencyMs = Date.now() - startTime;
-      console.error(`[AI Audit] Feature: ${feature} | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${err.message}`);
-      throw err;
+      console.error(`[AI Audit] Feature: ${feature} | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${formatted.message}`);
+      throw formatted;
     }
 
     const candidate = response.candidates?.[0];
@@ -287,9 +337,10 @@ class LlmService {
         throw new Error('AI output did not match expected structure after retry.');
       }
     } catch (retryErr) {
+      const formatted = this.formatError(retryErr);
       const latencyMs = Date.now() - startTime;
-      console.error(`[AI Audit] Feature: ${feature} (retry failed) | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${retryErr.message}`);
-      throw retryErr;
+      console.error(`[AI Audit] Feature: ${feature} (retry failed) | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${formatted.message}`);
+      throw formatted;
     }
   }
 }

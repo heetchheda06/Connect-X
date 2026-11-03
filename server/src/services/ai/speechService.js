@@ -31,7 +31,7 @@ class SpeechService {
 
   getClient() {
     const currentKey = env.sttApiKey || env.geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!this.client && currentKey) {
+    if (currentKey && (!this.client || this.apiKey !== currentKey)) {
       this.apiKey = currentKey;
       this.client = new GoogleGenAI({ apiKey: currentKey });
     }
