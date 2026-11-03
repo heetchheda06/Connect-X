@@ -19,16 +19,17 @@ export default function ChatHeader({
   const { typingUsers } = useSocketStore();
   const { settings: aiSettings, updateSettings: updateAiSettings, languages } = useAiStore();
   const { translateBatch } = useTranslationStore();
-  const messages = useChatStore((state) => state.messages[conversation._id] || []);
+  const messages = useChatStore((state) => (conversation?._id && state.messagesByConv ? state.messagesByConv[conversation._id] : []) || []);
 
-  const [currentAiMode, setCurrentAiMode] = useState(conversation.ai?.mode || 'on_demand');
+  const [currentAiMode, setCurrentAiMode] = useState(conversation?.ai?.mode || 'on_demand');
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
 
   useEffect(() => {
-    setCurrentAiMode(conversation.ai?.mode || 'on_demand');
-  }, [conversation.ai?.mode, conversation._id]);
+    setCurrentAiMode(conversation?.ai?.mode || 'on_demand');
+  }, [conversation?.ai?.mode, conversation?._id]);
 
   const handleSelectAiMode = async (mode) => {
+    if (!conversation?._id) return;
     try {
       setIsModeMenuOpen(false);
       setCurrentAiMode(mode);
@@ -41,10 +42,10 @@ export default function ChatHeader({
 
   const autoTranslateList = aiSettings?.autoTranslateConversations || [];
   const isAutoTranslateOn = autoTranslateList.some(
-    (id) => (id?._id || id)?.toString() === conversation._id?.toString()
+    (id) => (id?._id || id)?.toString() === conversation?._id?.toString()
   );
 
-  const preferredLangObj = languages.find((l) => l.code === (aiSettings?.preferredLanguage || 'en'));
+  const preferredLangObj = (languages || []).find((l) => l.code === (aiSettings?.preferredLanguage || 'en'));
   const preferredLangName = preferredLangObj?.name || 'English';
 
   const handleToggleAutoTranslate = async () => {

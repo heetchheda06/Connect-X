@@ -152,6 +152,8 @@ export default function ReminderModal({ isOpen, onClose, targetMessage = null, c
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
       <div className="bg-surface border border-border-main rounded-2xl shadow-brand-lg w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">

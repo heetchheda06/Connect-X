@@ -62,7 +62,7 @@ export default function MessageBubble({
   const translationError = getError(message._id);
 
   const preferredLang = aiSettings?.preferredLanguage || 'en';
-  const targetLangObj = languages.find((l) => l.code === preferredLang);
+  const targetLangObj = (languages || []).find((l) => l.code === preferredLang);
   const targetLangLabel = targetLangObj?.name || 'English';
 
   const canTranslate = !isDeleted && message.content && aiSettings?.enabled;

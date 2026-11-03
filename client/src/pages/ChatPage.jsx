@@ -18,6 +18,7 @@ import AddMembersModal from '../components/modals/AddMembersModal.jsx';
 import ReminderModal from '../components/modals/ReminderModal.jsx';
 import AiDrawer from '../components/chat/AiDrawer.jsx';
 import ReconnectingBanner from '../components/layout/ReconnectingBanner.jsx';
+import ErrorBoundary from '../components/ui/ErrorBoundary.jsx';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';
 import { useSocketStore } from '../store/socketStore.js';
@@ -274,7 +275,7 @@ export default function ChatPage() {
   const handleSendMessage = async (messagePayload) => {
     if (!activeConversationId) return;
 
-    const { content, attachment, replyTo } = messagePayload;
+    const { content, attachment, replyTo, type, aiCard } = messagePayload;
 
     if (socket && socket.connected) {
       socket.emit('message:send', {
@@ -282,6 +283,8 @@ export default function ChatPage() {
         content,
         attachment,
         replyTo,
+        type,
+        aiCard,
       });
     } else {
       // Fallback to REST API
@@ -290,6 +293,8 @@ export default function ChatPage() {
           content,
           attachment,
           replyTo,
+          type,
+          aiCard,
         });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to send message');
@@ -333,7 +338,7 @@ export default function ChatPage() {
         }`}
       >
         {activeConversation ? (
-          <>
+          <ErrorBoundary onReset={() => setActiveConversation(null)}>
             <ChatHeader
               conversation={activeConversation}
               currentUserId={user?._id}
@@ -397,7 +402,7 @@ export default function ChatPage() {
               onSendMessage={handleSendMessage}
               disabled={false}
             />
-          </>
+          </ErrorBoundary>
         ) : (
           /* Empty Chat State */
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-chat-pattern select-none">
