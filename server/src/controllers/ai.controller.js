@@ -1,4 +1,5 @@
 import User from '../models/user.model.js';
+import AiThread from '../models/aiThread.model.js';
 import { SUPPORTED_LANGUAGES, isValidTargetLanguage } from '../services/ai/languages.js';
 import { translationService } from '../services/ai/translationService.js';
 import { smartReplyService } from '../services/ai/smartReplyService.js';
@@ -325,6 +326,53 @@ export const askThisChat = async (req, res, next) => {
       success: true,
       message: 'Answer generated',
       data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get Ask AI Q&A Thread history for a conversation
+ * GET /api/ai/ask/thread/:conversationId
+ */
+export const getAskThread = async (req, res, next) => {
+  try {
+    const { conversationId } = req.params;
+    const thread = await AiThread.findOne({
+      user: req.user._id,
+      conversation: conversationId,
+    }).sort({ updatedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Thread history retrieved',
+      data: {
+        threadId: thread ? thread._id : null,
+        messages: thread ? thread.messages : [],
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Clear Ask AI Q&A Thread history for a conversation
+ * DELETE /api/ai/ask/thread/:conversationId
+ */
+export const clearAskThread = async (req, res, next) => {
+  try {
+    const { conversationId } = req.params;
+    await AiThread.deleteMany({
+      user: req.user._id,
+      conversation: conversationId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Thread history cleared',
+      data: null,
     });
   } catch (err) {
     next(err);

@@ -4,6 +4,7 @@ import {
   listTasks,
   createTask,
   updateTask,
+  deleteTask,
   exportTasksIcs,
 } from '../controllers/task.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
@@ -15,6 +16,7 @@ router.post('/extract', extractInsights);
 router.get('/', listTasks);
 router.post('/', createTask);
 router.put('/:id', updateTask);
+router.delete('/:id', deleteTask);
 router.get('/export.ics', exportTasksIcs);
 
 export default router;

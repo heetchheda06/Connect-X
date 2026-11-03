@@ -12,45 +12,102 @@ import { env } from '../../config/env.js';
 const insightsOutputSchema = z.object({
   tasks: z
     .array(
-      z.object({
-        title: z.string(),
-        description: z.string().default(''),
-        suggestedAssignee: z.string().nullable().default(null),
-        dueAt: z.string().nullable().default(null),
-        priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
-        confidence: z.number().default(0.8),
-        sourceMessageId: z.string().nullable().default(null),
-      })
+      z.preprocess(
+        (val) => {
+          if (typeof val === 'string') return { title: val };
+          if (val && typeof val === 'object') {
+            const copy = { ...val };
+            copy.title = String(copy.title || copy.task || copy.name || copy.text || '').trim();
+            copy.description = String(copy.description || copy.desc || copy.details || '').trim();
+            const p = String(copy.priority || '').toLowerCase();
+            copy.priority = ['low', 'medium', 'high', 'urgent'].includes(p) ? p : 'medium';
+            return copy;
+          }
+          return val;
+        },
+        z.object({
+          title: z.string().min(1),
+          description: z.string().default(''),
+          suggestedAssignee: z.any().transform((v) => (v ? String(v) : null)).default(null),
+          dueAt: z.any().transform((v) => (v ? String(v) : null)).default(null),
+          priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+          confidence: z.any().transform((v) => {
+            const n = Number(v);
+            return isNaN(n) ? 0.8 : n > 1 ? n / 100 : n;
+          }).default(0.8),
+          sourceMessageId: z.any().transform((v) => (v ? String(v) : null)).default(null),
+        })
+      )
     )
     .default([]),
   deadlines: z
     .array(
-      z.object({
-        title: z.string(),
-        dueAt: z.string(),
-        confidence: z.number().default(0.8),
-        sourceMessageId: z.string().nullable().default(null),
-      })
+      z.preprocess(
+        (val) => {
+          if (val && typeof val === 'object') {
+            const copy = { ...val };
+            copy.title = String(copy.title || copy.task || copy.name || '').trim();
+            copy.dueAt = String(copy.dueAt || copy.date || copy.time || '').trim();
+            return copy;
+          }
+          return val;
+        },
+        z.object({
+          title: z.string().min(1),
+          dueAt: z.string().default(''),
+          confidence: z.any().transform((v) => {
+            const n = Number(v);
+            return isNaN(n) ? 0.8 : n > 1 ? n / 100 : n;
+          }).default(0.8),
+          sourceMessageId: z.any().transform((v) => (v ? String(v) : null)).default(null),
+        })
+      )
     )
     .default([]),
   decisions: z
     .array(
-      z.object({
-        text: z.string(),
-        context: z.string().default(''),
-        proposedBy: z.string().nullable().default(null),
-        confidence: z.number().default(0.8),
-        sourceMessageId: z.string().nullable().default(null),
-      })
+      z.preprocess(
+        (val) => {
+          if (typeof val === 'string') return { text: val };
+          if (val && typeof val === 'object') {
+            const copy = { ...val };
+            copy.text = String(copy.text || copy.decision || copy.conclusion || '').trim();
+            copy.context = String(copy.context || copy.details || '').trim();
+            return copy;
+          }
+          return val;
+        },
+        z.object({
+          text: z.string().min(1),
+          context: z.string().default(''),
+          proposedBy: z.any().transform((v) => (v ? String(v) : null)).default(null),
+          confidence: z.any().transform((v) => {
+            const n = Number(v);
+            return isNaN(n) ? 0.8 : n > 1 ? n / 100 : n;
+          }).default(0.8),
+          sourceMessageId: z.any().transform((v) => (v ? String(v) : null)).default(null),
+        })
+      )
     )
     .default([]),
   openQuestions: z
     .array(
-      z.object({
-        question: z.string(),
-        askedBy: z.string().nullable().default(null),
-        sourceMessageId: z.string().nullable().default(null),
-      })
+      z.preprocess(
+        (val) => {
+          if (typeof val === 'string') return { question: val };
+          if (val && typeof val === 'object') {
+            const copy = { ...val };
+            copy.question = String(copy.question || copy.query || copy.prompt || '').trim();
+            return copy;
+          }
+          return val;
+        },
+        z.object({
+          question: z.string().min(1),
+          askedBy: z.any().transform((v) => (v ? String(v) : null)).default(null),
+          sourceMessageId: z.any().transform((v) => (v ? String(v) : null)).default(null),
+        })
+      )
     )
     .default([]),
 });
@@ -58,15 +115,29 @@ const insightsOutputSchema = z.object({
 const INSIGHTS_PROMPT = `
 You are the ConnectX Shared Insight Pipeline.
 Analyze the conversation messages in <chat_data> and extract actionable items in one structured pass:
-1. "tasks": Actionable requests or commitments (e.g., "I will submit the deck", "Please review the PR").
+1. "tasks": Actionable requests, todos, assignments, or commitments (e.g. "I will submit the deck", "Please review the PR", "Check the server").
 2. "deadlines": Specific dates or times mentioned for tasks, launches, meetings or submissions.
-3. "decisions": Clear agreements, conclusions, or consensus reached (e.g., "We agreed on Option B", "Launch is set for Nov 10").
+3. "decisions": Clear agreements, conclusions, or consensus reached (e.g. "We agreed on Option B", "Launch is set for Nov 10").
 4. "openQuestions": Unresolved queries or questions awaiting an answer.
 
 RULES:
-- Only extract items with high confidence (>= 0.6).
-- Quote short evidence and preserve the original language and names.
-- Output strict JSON according to the schema.
+- Extract any action item, promise, task or request with reasonable confidence (>= 0.5).
+- Output strictly valid JSON matching this exact structure:
+{
+  "tasks": [
+    {
+      "title": "Clear action title",
+      "description": "Details or notes",
+      "suggestedAssignee": "name or null",
+      "dueAt": "ISO date string or null",
+      "priority": "medium",
+      "confidence": 0.85
+    }
+  ],
+  "deadlines": [],
+  "decisions": [],
+  "openQuestions": []
+}
 ${PROMPT_INJECTION_DEFENSE}
 `;
 
@@ -134,7 +205,7 @@ export class InsightService {
 
     // 3. Process & Deduplicate Tasks
     for (const t of extracted.tasks || []) {
-      if (t.confidence < 0.6) continue;
+      if (!t || !t.title || (t.confidence !== undefined && t.confidence < 0.5)) continue;
       const fp = generateFingerprint(t.title);
 
       const existing = await Task.findOne({

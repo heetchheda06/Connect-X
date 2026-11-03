@@ -130,6 +130,27 @@ export const updateTask = async (req, res, next) => {
   }
 };
 
+export const deleteTask = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const task = await Task.findByIdAndDelete(id);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Task not found', data: null });
+    }
+    const io = req.app.get('io');
+    if (io) {
+      io.to(task.conversation.toString()).emit('task:deleted', { taskId: id });
+    }
+    return res.status(200).json({
+      success: true,
+      message: 'Task deleted successfully',
+      data: null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const exportTasksIcs = async (req, res, next) => {
   try {
     const { conversationId } = req.query;

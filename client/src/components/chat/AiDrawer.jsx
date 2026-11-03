@@ -21,7 +21,13 @@ import {
   ArrowRight,
   BookOpen,
   MessageSquare,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Send,
+  Copy,
+  Bot,
+  User as UserIcon,
+  Globe
 } from 'lucide-react';
 import { 
   generateSummaryApi, 
@@ -30,11 +36,14 @@ import {
   listTasksApi, 
   updateTaskApi, 
   createTaskApi,
+  deleteTaskApi,
   listDeadlinesApi,
   acceptDeadlineApi,
   listDecisionsApi, 
   updateDecisionApi, 
   askThisChatApi,
+  getAskThreadApi,
+  clearAskThreadApi,
   startMeetingApi,
   endMeetingApi,
   generateFlashcardsApi,
@@ -68,15 +77,22 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
   const [tasks, setTasks] = useState([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [taskFilter, setTaskFilter] = useState('all');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState('medium');
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   // Decisions state
   const [decisions, setDecisions] = useState([]);
   const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
 
-  // Ask AI state
+  // Ask AI Chatbot state
   const [askQuery, setAskQuery] = useState('');
   const [isAsking, setIsAsking] = useState(false);
-  const [askResult, setAskResult] = useState(null);
+  const [askMessages, setAskMessages] = useState([]);
+  const [askThreadId, setAskThreadId] = useState(null);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
+  const chatBottomRef = React.useRef(null);
 
   // Meeting Mode state
   const [meetingTitle, setMeetingTitle] = useState('');
@@ -105,8 +121,15 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
     }
   }, [isOpen, conversationId, activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'ask' && chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [askMessages, isAsking, activeTab]);
+
   const loadInitialData = () => {
     if (activeTab === 'tasks') fetchTasks();
+    if (activeTab === 'ask') fetchAskThread();
     if (activeTab === 'decisions') fetchDecisions();
     if (activeTab === 'analytics') fetchAnalytics();
     if (activeTab === 'privacy') fetchPrivacyActivity();
@@ -210,17 +233,124 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
     }
   };
 
-  const handleAsk = async () => {
-    if (!askQuery.trim()) return;
+  const handleCreateTask = async (e) => {
+    if (e) e.preventDefault();
+    if (!newTaskTitle.trim() || isCreatingTask) return;
     try {
-      setIsAsking(true);
+      setIsCreatingTask(true);
+      const res = await createTaskApi({
+        conversationId,
+        title: newTaskTitle.trim(),
+        priority: newTaskPriority,
+      });
+      if (res.success) {
+        toast.success('Task created! 🎯');
+        setNewTaskTitle('');
+        fetchTasks();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create task');
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    try {
+      await deleteTaskApi(taskId);
+      toast.success('Task removed');
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    } catch (err) {
+      toast.error('Failed to delete task');
+    }
+  };
+
+  const fetchAskThread = async () => {
+    if (!conversationId) return;
+    try {
+      setIsLoadingThread(true);
+      const res = await getAskThreadApi(conversationId);
+      if (res.success && res.data) {
+        setAskThreadId(res.data.threadId || null);
+        if (Array.isArray(res.data.messages) && res.data.messages.length > 0) {
+          setAskMessages(
+            res.data.messages.map((m, idx) => ({
+              id: m._id || idx,
+              role: m.role === 'user' ? 'user' : 'assistant',
+              content: m.content,
+              citations: m.citations || [],
+              timestamp: m.timestamp || new Date(),
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      // silently ignore thread init error
+    } finally {
+      setIsLoadingThread(false);
+    }
+  };
+
+  const handleClearThread = async () => {
+    try {
+      await clearAskThreadApi(conversationId);
+      setAskMessages([]);
+      setAskThreadId(null);
+      toast.success('Chat history cleared');
+    } catch (err) {
+      toast.error('Failed to clear chat history');
+    }
+  };
+
+  const handleAsk = async (presetQuestion) => {
+    const q = (presetQuestion || askQuery).trim();
+    if (!q || isAsking) return;
+
+    const userMsg = {
+      id: Date.now(),
+      role: 'user',
+      content: q,
+      timestamp: new Date(),
+    };
+
+    setAskMessages((prev) => [...prev, userMsg]);
+    setAskQuery('');
+    setIsAsking(true);
+
+    try {
       const res = await askThisChatApi({
         conversationId,
-        question: askQuery.trim(),
+        question: q,
+        threadId: askThreadId,
       });
-      if (res.success) setAskResult(res.data);
+
+      if (res.success && res.data) {
+        if (res.data.threadId) setAskThreadId(res.data.threadId);
+        const aiMsg = {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: res.data.answer || "I processed your request.",
+          citations: res.data.citations || [],
+          isFromChat: res.data.isFromChat,
+          notFound: res.data.notFound,
+          timestamp: new Date(),
+        };
+        setAskMessages((prev) => [...prev, aiMsg]);
+      } else {
+        toast.error('Could not get response from AI');
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not find answer');
+      toast.error(err.response?.data?.message || err.message || 'AI request failed');
+      setAskMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: "Sorry, I ran into an error processing that question. Please try again.",
+          isError: true,
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsAsking(false);
     }
@@ -500,61 +630,183 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
         {/* 2. Tasks & Deadlines Tab */}
         {activeTab === 'tasks' && (
           <div className="space-y-3">
+            {/* Header with Quick Add & Scan buttons */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-text-primary">Actionable Tasks</span>
+              <div>
+                <span className="text-xs font-bold text-text-primary">Actionable Tasks</span>
+                <span className="text-[10px] text-text-muted block">Track, assign, and scan commitments</span>
+              </div>
               <button
                 onClick={handleScanInsights}
                 disabled={isExtracting}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-button bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200 hover:bg-brand-100"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-button bg-brand-50 text-brand-700 text-xs font-bold border border-brand-200 hover:bg-brand-100 transition-colors"
+                title="Scan recent chat messages for commitments with AI"
               >
-                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {isExtracting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-brand-500" />}
                 Scan Chat
               </button>
             </div>
 
-            {tasks.length === 0 ? (
-              <div className="text-center py-8 text-text-muted text-xs space-y-1">
-                <CheckSquare className="w-6 h-6 mx-auto opacity-40" />
-                <p>No tasks detected yet</p>
-                <p className="text-[11px]">Click "Scan Chat" to automatically extract commitments.</p>
-              </div>
-            ) : (
-              tasks.map((task) => (
-                <div
-                  key={task._id}
-                  className="p-3 rounded-xl bg-surface-alt border border-border-main flex items-start justify-between gap-2 text-xs"
+            {/* Quick Add Task Input */}
+            <form onSubmit={handleCreateTask} className="p-2.5 rounded-xl bg-surface-alt border border-border-main space-y-2">
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="Add a new task (e.g. Review the documentation)..."
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-surface border border-border-main text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+                <button
+                  type="submit"
+                  disabled={isCreatingTask || !newTaskTitle.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold inline-flex items-center gap-1 disabled:opacity-50 transition-colors"
                 >
-                  <div className="flex items-start gap-2 flex-1">
+                  {isCreatingTask ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  Add
+                </button>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-text-muted px-0.5">
+                <span>Priority:</span>
+                <div className="flex gap-1">
+                  {['low', 'medium', 'high', 'urgent'].map((p) => (
                     <button
-                      onClick={() => handleToggleTaskDone(task)}
-                      className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center ${
-                        task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-border-main bg-surface'
+                      key={p}
+                      type="button"
+                      onClick={() => setNewTaskPriority(p)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize transition-colors ${
+                        newTaskPriority === p
+                          ? 'bg-brand-500 text-white'
+                          : 'bg-surface border border-border-main text-text-muted hover:text-text-primary'
                       }`}
                     >
-                      {task.status === 'done' && <Check className="w-3 h-3" />}
+                      {p}
                     </button>
-                    <div>
-                      <p className={`font-semibold text-text-primary ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
-                        {task.title}
-                      </p>
-                      {task.dueAt && (
-                        <span className="text-[10px] text-brand-600 block mt-0.5">
-                          Due: {new Date(task.dueAt).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {task.status === 'suggested' && (
-                    <button
-                      onClick={() => handleAcceptTask(task._id)}
-                      className="px-2 py-1 rounded bg-brand-500 text-white text-[10px] font-bold"
-                    >
-                      Accept
-                    </button>
-                  )}
+                  ))}
                 </div>
-              ))
+              </div>
+            </form>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1 border-b border-border-main pb-1">
+              {[
+                { id: 'all', label: `All (${tasks.length})` },
+                { id: 'pending', label: `Pending (${tasks.filter((t) => t.status !== 'done').length})` },
+                { id: 'done', label: `Done (${tasks.filter((t) => t.status === 'done').length})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setTaskFilter(tab.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    taskFilter === tab.id
+                      ? 'bg-brand-50 text-brand-700 font-bold'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Task List */}
+            {isLoadingTasks ? (
+              <div className="text-center py-8 text-text-muted text-xs">
+                <Loader2 className="w-5 h-5 mx-auto animate-spin mb-1 text-brand-500" />
+                <p>Loading tasks...</p>
+              </div>
+            ) : tasks.filter((t) => {
+                if (taskFilter === 'pending') return t.status !== 'done';
+                if (taskFilter === 'done') return t.status === 'done';
+                return true;
+              }).length === 0 ? (
+              <div className="text-center py-8 text-text-muted text-xs space-y-1">
+                <CheckSquare className="w-6 h-6 mx-auto opacity-40" />
+                <p>No tasks found in this view</p>
+                <p className="text-[11px]">Type a task above or click "Scan Chat" to detect action items.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {tasks
+                  .filter((t) => {
+                    if (taskFilter === 'pending') return t.status !== 'done';
+                    if (taskFilter === 'done') return t.status === 'done';
+                    return true;
+                  })
+                  .map((task) => (
+                    <div
+                      key={task._id}
+                      className="p-3 rounded-xl bg-surface-alt border border-border-main flex items-start justify-between gap-2 text-xs hover:border-brand-300 transition-colors"
+                    >
+                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                        <button
+                          onClick={() => handleToggleTaskDone(task)}
+                          className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
+                            task.status === 'done'
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-border-main bg-surface hover:border-brand-400'
+                          }`}
+                        >
+                          {task.status === 'done' && <Check className="w-3 h-3" />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className={`font-semibold text-text-primary break-words ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
+                            {task.title}
+                          </p>
+                          {task.description && (
+                            <p className="text-[11px] text-text-muted mt-0.5 break-words line-clamp-2">
+                              {task.description}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {task.priority && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  task.priority === 'urgent'
+                                    ? 'bg-red-100 text-red-700'
+                                    : task.priority === 'high'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : task.priority === 'low'
+                                    ? 'bg-slate-100 text-slate-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
+                              >
+                                {task.priority}
+                              </span>
+                            )}
+                            {task.origin === 'ai' && (
+                              <span className="px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[9px] font-bold inline-flex items-center gap-0.5">
+                                <Sparkles className="w-2.5 h-2.5" /> AI
+                              </span>
+                            )}
+                            {task.dueAt && (
+                              <span className="text-[10px] text-brand-600 font-medium">
+                                Due {new Date(task.dueAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {task.status === 'suggested' && (
+                          <button
+                            onClick={() => handleAcceptTask(task._id)}
+                            className="px-2 py-1 rounded bg-brand-500 hover:bg-brand-600 text-white text-[10px] font-bold transition-colors"
+                          >
+                            Accept
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteTask(task._id)}
+                          className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Delete task"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             )}
           </div>
         )}
@@ -594,46 +846,172 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
           </div>
         )}
 
-        {/* 4. Ask AI Tab */}
+        {/* 4. Ask AI Tab (Interactive Chatbot) */}
         {activeTab === 'ask' && (
-          <div className="space-y-3 text-xs">
-            <span className="text-xs font-bold text-text-primary">Ask This Chat</span>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={askQuery}
-                onChange={(e) => setAskQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAsk()}
-                placeholder="What did Riya suggest? Who is doing what?"
-                className="flex-1 px-3 py-2 rounded-xl bg-surface-alt border border-border-main text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400"
-              />
-              <button
-                onClick={handleAsk}
-                disabled={isAsking || !askQuery.trim()}
-                className="px-3 py-2 rounded-xl bg-brand-gradient text-white font-bold shadow-xs disabled:opacity-50"
-              >
-                {isAsking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ask'}
-              </button>
+          <div className="flex flex-col h-[520px] text-xs">
+            {/* Chatbot Header */}
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-main">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-brand-gradient flex items-center justify-center text-white shadow-xs">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-text-primary text-xs">ConnectX AI Assistant</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  </div>
+                  <span className="text-[10px] text-text-muted block">Answers chat history & general questions</span>
+                </div>
+              </div>
+              {askMessages.length > 0 && (
+                <button
+                  onClick={handleClearThread}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                  title="Clear conversation"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
             </div>
 
-            {askResult && (
-              <div className="p-3 rounded-xl bg-brand-50/80 border border-brand-200 space-y-2 animate-fade-in">
-                <span className="text-[10px] uppercase font-bold text-brand-700 block">Answer</span>
-                <p className="text-text-primary leading-relaxed">{askResult.answer}</p>
-                {askResult.citations?.length > 0 && (
-                  <div className="pt-1 border-t border-brand-200/60">
-                    <span className="text-[10px] font-bold text-text-muted block mb-1">Citations</span>
-                    <div className="flex flex-wrap gap-1">
-                      {askResult.citations.map((c, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded bg-white border border-brand-200 text-[10px] text-brand-700 font-medium">
-                          {c.sender ? `[${c.sender}]` : 'Message citation'}
-                        </span>
+            {/* Chatbot Message Thread */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 py-1">
+              {askMessages.length === 0 ? (
+                <div className="py-6 space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/40 border border-brand-200/80 space-y-2 text-center">
+                    <Sparkles className="w-7 h-7 mx-auto text-brand-600" />
+                    <h4 className="font-bold text-text-primary text-xs">Hello! How can I help you today?</h4>
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      Ask anything about this chat (decisions, tasks, member remarks) or ask any general question (e.g. concepts, technology, explanations).
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Suggested Questions</span>
+                    <div className="flex flex-col gap-1.5">
+                      {[
+                        '⚡ What is the role of fiber optic cable?',
+                        '📋 What tasks or commitments are pending?',
+                        '💡 Summarize the latest key points from this chat',
+                        '🎯 What decisions were made in this room?'
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          onClick={() => handleAsk(chip.replace(/^[^\s]+\s*/, ''))}
+                          className="text-left px-3 py-2 rounded-xl bg-surface-alt border border-border-main text-[11px] text-text-primary hover:border-brand-400 hover:bg-brand-50/50 transition-colors flex items-center justify-between group"
+                        >
+                          <span>{chip}</span>
+                          <ArrowRight className="w-3 h-3 text-brand-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              ) : (
+                askMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    {msg.role === 'user' ? (
+                      <div className="max-w-[85%] rounded-2xl rounded-tr-xs px-3.5 py-2 bg-brand-gradient text-white text-xs shadow-xs break-words">
+                        {msg.content}
+                      </div>
+                    ) : (
+                      <div className="max-w-[90%] space-y-2">
+                        <div className="p-3 rounded-2xl rounded-tl-xs bg-surface-alt border border-border-main space-y-2 shadow-xs">
+                          {/* Badge: Chat citation vs General Knowledge */}
+                          <div className="flex items-center justify-between gap-2 border-b border-border-main/50 pb-1.5">
+                            {msg.citations?.length > 0 || msg.isFromChat ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">
+                                <Sparkles className="w-2.5 h-2.5" /> Cited from this chat
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                                <Globe className="w-2.5 h-2.5" /> General Knowledge
+                              </span>
+                            )}
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(msg.content);
+                                toast.success('Answer copied to clipboard!');
+                              }}
+                              className="text-text-muted hover:text-text-primary p-0.5 rounded transition-colors"
+                              title="Copy answer"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <div className="text-text-primary text-xs leading-relaxed whitespace-pre-wrap break-words">
+                            {msg.content}
+                          </div>
+
+                          {/* Citations if any */}
+                          {msg.citations?.length > 0 && (
+                            <div className="pt-2 border-t border-border-main/60 space-y-1">
+                              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">
+                                Chat Citations ({msg.citations.length})
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {msg.citations.map((c, i) => (
+                                  <div
+                                    key={i}
+                                    className="px-2 py-0.5 rounded-md bg-white border border-brand-200 text-[10px] text-brand-700 font-medium max-w-full truncate"
+                                    title={c.textSnippet || ''}
+                                  >
+                                    {c.sender ? `[${c.sender}]` : 'Message citation'}
+                                    {c.textSnippet && `: "${c.textSnippet.slice(0, 30)}..."`}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <span className="text-[9px] text-text-muted mt-0.5 px-1">
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                ))
+              )}
+
+              {isAsking && (
+                <div className="flex items-center gap-2 p-3 rounded-2xl bg-surface-alt border border-border-main text-xs text-text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+                  <span>ConnectX AI is thinking...</span>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+
+            {/* Chatbot Input Box */}
+            <div className="pt-2 border-t border-border-main">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAsk();
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <input
+                  type="text"
+                  value={askQuery}
+                  onChange={(e) => setAskQuery(e.target.value)}
+                  placeholder="Ask a question about this chat or any topic..."
+                  className="flex-1 px-3 py-2 rounded-xl bg-surface-alt border border-border-main text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+                <button
+                  type="submit"
+                  disabled={isAsking || !askQuery.trim()}
+                  className="p-2 rounded-xl bg-brand-gradient text-white font-bold shadow-xs disabled:opacity-40 hover:opacity-90 transition-opacity"
+                  title="Send question"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
           </div>
         )}
 

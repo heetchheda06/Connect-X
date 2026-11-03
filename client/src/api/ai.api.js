@@ -122,6 +122,11 @@ export const updateTaskApi = async (id, data) => {
   return response.data;
 };
 
+export const deleteTaskApi = async (id) => {
+  const response = await api.delete(`/tasks/${id}`);
+  return response.data;
+};
+
 export const listDeadlinesApi = async (conversationId) => {
   const response = await api.get('/deadlines', { params: { conversationId } });
   return response.data;
@@ -160,6 +165,16 @@ export const shareSummaryApi = async (summaryId) => {
 
 export const askThisChatApi = async ({ conversationId, question, threadId }) => {
   const response = await api.post('/ai/ask', { conversationId, question, threadId });
+  return response.data;
+};
+
+export const getAskThreadApi = async (conversationId) => {
+  const response = await api.get(`/ai/ask/thread/${conversationId}`);
+  return response.data;
+};
+
+export const clearAskThreadApi = async (conversationId) => {
+  const response = await api.delete(`/ai/ask/thread/${conversationId}`);
   return response.data;
 };
 

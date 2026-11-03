@@ -12,6 +12,8 @@ import {
   generateCatchUpSummary,
   shareSummaryCard,
   askThisChat,
+  getAskThread,
+  clearAskThread,
   chatAssistant,
   analyzeDocument,
   askDocument,
@@ -74,6 +76,8 @@ router.post('/summary/:id/share', shareSummaryCard);
 
 // Ask This Chat route (Section 11)
 router.post('/ask', generalAiLimiter, askThisChat);
+router.get('/ask/thread/:conversationId', generalAiLimiter, getAskThread);
+router.delete('/ask/thread/:conversationId', generalAiLimiter, clearAskThread);
 
 // Assistant route (Section 13)
 router.post('/assistant', generalAiLimiter, chatAssistant);
