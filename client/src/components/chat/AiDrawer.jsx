@@ -94,13 +94,13 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
   // Privacy state
-  const [aiMode, setAiMode] = useState(conversation?.ai?.mode || 'off');
+  const [aiMode, setAiMode] = useState(conversation?.ai?.mode || 'on_demand');
   const [isOptedOut, setIsOptedOut] = useState(false);
   const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     if (isOpen && conversationId) {
-      setAiMode(conversation?.ai?.mode || 'off');
+      setAiMode(conversation?.ai?.mode || 'on_demand');
       loadInitialData();
     }
   }, [isOpen, conversationId, activeTab]);
@@ -254,10 +254,10 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
       const res = await endMeetingApi(activeMeeting._id);
       if (res.success) {
         setActiveMeeting(res.data.meeting);
-        toast.success('Meeting ended! Minutes generated.');
+        toast.success('Meeting ended! Minutes generated ✨');
       }
     } catch (err) {
-      toast.error('Failed to end meeting');
+      toast.error(err.response?.data?.message || err.message || 'Failed to end meeting');
     } finally {
       setIsMeetingLoading(false);
     }
@@ -278,7 +278,7 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
         toast.success('Flashcards ready! 🎓');
       }
     } catch (err) {
-      toast.error('Failed to generate cards');
+      toast.error(err.response?.data?.message || err.message || 'Failed to generate cards');
     } finally {
       setIsGeneratingStudy(false);
     }
@@ -339,7 +339,26 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
           </div>
           <div>
             <h2 className="text-sm font-bold text-text-primary">ConnectX AI Insights</h2>
-            <p className="text-[10px] text-text-muted capitalize">Mode: {aiMode}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${aiMode === 'off' ? 'bg-gray-400' : 'bg-emerald-500'}`} />
+              <button
+                type="button"
+                onClick={async () => {
+                  const next = aiMode === 'off' ? 'on_demand' : (aiMode === 'on_demand' ? 'auto' : 'off');
+                  try {
+                    await updateConversationAiModeApi(conversationId, next);
+                    setAiMode(next);
+                    toast.success(`Chat AI Mode: ${next.replace('_', ' ')} ✨`);
+                  } catch (e) {
+                    toast.error('Failed to change mode');
+                  }
+                }}
+                className="text-[10px] font-semibold text-text-muted hover:text-brand-600 transition-colors uppercase tracking-wider underline cursor-pointer"
+                title="Click to toggle mode"
+              >
+                Mode: {aiMode.replace('_', ' ')}
+              </button>
+            </div>
           </div>
         </div>
         <button
@@ -349,6 +368,28 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
           <X className="w-5 h-5" />
         </button>
       </div>
+
+      {/* AI Off Warning Banner with One-Click Turn On */}
+      {aiMode === 'off' && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between text-xs text-amber-800">
+          <span>AI is currently set to Off for this chat.</span>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await updateConversationAiModeApi(conversationId, 'on_demand');
+                setAiMode('on_demand');
+                toast.success('Chat AI set to On-Demand ✨');
+              } catch {
+                toast.error('Failed to enable AI');
+              }
+            }}
+            className="px-2.5 py-1 rounded bg-amber-600 text-white font-bold text-[11px] hover:bg-amber-700 shadow-xs"
+          >
+            Turn On
+          </button>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex border-b border-border-main bg-surface px-2 overflow-x-auto scrollbar-none text-xs">

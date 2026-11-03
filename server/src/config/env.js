@@ -47,7 +47,7 @@ export const env = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   aiModel: process.env.AI_MODEL || 'gemini-2.5-flash',
   aiModelFast: process.env.AI_MODEL_FAST || 'gemini-2.5-flash',
-  aiModelSmart: process.env.AI_MODEL_SMART || 'gemini-2.5-pro',
+  aiModelSmart: process.env.AI_MODEL_SMART || 'gemini-2.5-flash',
   sttProvider: process.env.STT_PROVIDER || 'gemini',
   sttModel: process.env.STT_MODEL || 'gemini-2.5-flash',
   sttApiKey: process.env.STT_API_KEY || process.env.GEMINI_API_KEY || '',

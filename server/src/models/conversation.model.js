@@ -78,7 +78,7 @@ const conversationSchema = new mongoose.Schema(
       mode: {
         type: String,
         enum: ['off', 'on_demand', 'auto'],
-        default: 'off',
+        default: 'on_demand',
       },
       setBy: {
         type: mongoose.Schema.Types.ObjectId,

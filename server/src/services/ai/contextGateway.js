@@ -77,7 +77,7 @@ export class ContextGateway {
       throw err;
     }
 
-    const mode = conversation.ai?.mode || 'off';
+    const mode = conversation.ai?.mode || 'on_demand';
 
     // In direct chats, if mode is off, allow tone assist only
     if (mode === 'off' && feature !== 'tone_assist') {

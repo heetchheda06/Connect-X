@@ -63,7 +63,7 @@ class TranslationService {
     // Verify user is a member of the conversation
     const isMember = await Conversation.exists({
       _id: message.conversation,
-      members: userId,
+      'members.user': userId,
     });
     if (!isMember) {
       const err = new Error('You do not have access to this conversation');
