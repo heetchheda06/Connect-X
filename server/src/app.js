@@ -14,6 +14,13 @@ import conversationRoutes from './routes/conversation.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import aiRoutes from './routes/ai.routes.js';
+import reminderRoutes from './routes/reminder.routes.js';
+import taskRoutes from './routes/task.routes.js';
+import decisionRoutes from './routes/decision.routes.js';
+import deadlineRoutes from './routes/deadline.routes.js';
+import meetingRoutes from './routes/meeting.routes.js';
+import studyRoutes from './routes/study.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
 
@@ -116,6 +123,13 @@ export const createApp = () => {
   app.use('/api/messages', messageRoutes);
   app.use('/api/uploads', uploadRoutes);
   app.use('/api/ai', aiRoutes);
+  app.use('/api/reminders', reminderRoutes);
+  app.use('/api/tasks', taskRoutes);
+  app.use('/api/decisions', decisionRoutes);
+  app.use('/api/deadlines', deadlineRoutes);
+  app.use('/api/meetings', meetingRoutes);
+  app.use('/api/study', studyRoutes);
+  app.use('/api/analytics', analyticsRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);

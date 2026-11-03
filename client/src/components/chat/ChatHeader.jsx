@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, PanelRight, MoreVertical, Search, Languages, Sparkles } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Avatar from '../ui/Avatar.jsx';
@@ -6,17 +6,38 @@ import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
 import { useAiStore } from '../../store/aiStore.js';
 import { useTranslationStore } from '../../store/translationStore.js';
+import { updateConversationAiModeApi } from '../../api/ai.api.js';
 
 export default function ChatHeader({
   conversation,
   currentUserId,
   onBack,
+  onToggleAiDrawer,
+  aiDrawerOpen,
 }) {
   const { toggleInfoDrawer, infoDrawerOpen } = useChatStore();
   const { typingUsers } = useSocketStore();
   const { settings: aiSettings, updateSettings: updateAiSettings, languages } = useAiStore();
   const { translateBatch } = useTranslationStore();
   const messages = useChatStore((state) => state.messages[conversation._id] || []);
+
+  const [currentAiMode, setCurrentAiMode] = useState(conversation.ai?.mode || 'on_demand');
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentAiMode(conversation.ai?.mode || 'on_demand');
+  }, [conversation.ai?.mode, conversation._id]);
+
+  const handleSelectAiMode = async (mode) => {
+    try {
+      setIsModeMenuOpen(false);
+      setCurrentAiMode(mode);
+      await updateConversationAiModeApi(conversation._id, mode);
+      toast.success(`Conversation AI set to ${mode.replace('_', ' ')} ✨`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update AI mode');
+    }
+  };
 
   const autoTranslateList = aiSettings?.autoTranslateConversations || [];
   const isAutoTranslateOn = autoTranslateList.some(
@@ -117,6 +138,94 @@ export default function ChatHeader({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 text-text-secondary">
+        {/* AI Mode Selector Dropdown */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsModeMenuOpen((prev) => !prev)}
+            className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+              currentAiMode === 'auto'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                : currentAiMode === 'off'
+                ? 'bg-gray-100 text-gray-600 border-gray-300'
+                : 'bg-brand-50 text-brand-700 border-brand-200'
+            }`}
+            title="Conversation AI Mode"
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                currentAiMode === 'auto'
+                  ? 'bg-emerald-500'
+                  : currentAiMode === 'off'
+                  ? 'bg-gray-400'
+                  : 'bg-brand-500'
+              }`}
+            />
+            <span>AI: {currentAiMode === 'auto' ? 'Auto' : currentAiMode === 'off' ? 'Off' : 'On-Demand'}</span>
+          </button>
+
+          {isModeMenuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-surface rounded-xl border border-border-main shadow-brand-lg p-1.5 z-30 animate-fade-in text-xs space-y-1">
+              <div className="px-2 py-1 text-[10px] font-bold text-text-muted uppercase">
+                Chat AI Mode
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectAiMode('on_demand')}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
+                  currentAiMode === 'on_demand'
+                    ? 'bg-brand-50 text-brand-700 font-bold'
+                    : 'hover:bg-surface-alt'
+                }`}
+              >
+                <span>On-Demand</span>
+                {currentAiMode === 'on_demand' && <span className="text-[10px] text-brand-600">Active</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectAiMode('auto')}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
+                  currentAiMode === 'auto'
+                    ? 'bg-emerald-50 text-emerald-700 font-bold'
+                    : 'hover:bg-surface-alt'
+                }`}
+              >
+                <span>Auto-Extract</span>
+                {currentAiMode === 'auto' && <span className="text-[10px] text-emerald-600">Active</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectAiMode('off')}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
+                  currentAiMode === 'off'
+                    ? 'bg-gray-100 text-gray-700 font-bold'
+                    : 'hover:bg-surface-alt'
+                }`}
+              >
+                <span>AI Off</span>
+                {currentAiMode === 'off' && <span className="text-[10px] text-gray-600">Active</span>}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* AI Insights Workspace Button */}
+        {onToggleAiDrawer && (
+          <button
+            type="button"
+            onClick={onToggleAiDrawer}
+            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border shadow-xs ${
+              aiDrawerOpen
+                ? 'bg-brand-gradient text-white border-transparent shadow-brand'
+                : 'bg-brand-50 hover:bg-brand-100 text-brand-700 border-brand-200'
+            }`}
+            title="Open ConnectX AI Workspace (Catch-Up, Tasks, Ask AI, Meetings, Study)"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${aiDrawerOpen ? 'text-white' : 'text-brand-500 fill-brand-500'}`} />
+            <span className="hidden sm:inline">AI Insights</span>
+          </button>
+        )}
+
         {/* Auto-Translate Toggle Button if AI is enabled */}
         {aiSettings?.enabled && (
           <button

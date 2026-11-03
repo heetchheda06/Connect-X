@@ -16,6 +16,8 @@ export default function MessageList({
   onDelete,
   onImageClick,
   onInfo,
+  onRemind,
+  onAnalyzeDoc,
 }) {
   const containerRef = useRef(null);
   const bottomRef = useRef(null);
@@ -142,6 +144,8 @@ export default function MessageList({
               onDelete={onDelete}
               onImageClick={onImageClick}
               onInfo={onInfo}
+              onRemind={onRemind}
+              onAnalyzeDoc={onAnalyzeDoc}
             />
           );
         })

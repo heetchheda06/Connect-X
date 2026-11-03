@@ -18,6 +18,14 @@ const attachmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    durationSec: {
+      type: Number,
+      default: 0,
+    },
+    waveform: {
+      type: [Number],
+      default: [],
+    },
   },
   { _id: false }
 );
@@ -52,8 +60,18 @@ const messageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'image', 'file', 'system'],
+      enum: ['text', 'image', 'file', 'voice', 'ai_card', 'system'],
       default: 'text',
+    },
+    aiCard: {
+      kind: {
+        type: String,
+        default: null,
+      },
+      payload: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
+      },
     },
     content: {
       type: String,

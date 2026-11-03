@@ -118,6 +118,63 @@ const userSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      summaries: {
+        type: Boolean,
+        default: true,
+      },
+      taskExtraction: {
+        type: Boolean,
+        default: true,
+      },
+      deadlineDetection: {
+        type: Boolean,
+        default: true,
+      },
+      decisionExtraction: {
+        type: Boolean,
+        default: true,
+      },
+      askChat: {
+        type: Boolean,
+        default: true,
+      },
+      assistant: {
+        type: Boolean,
+        default: true,
+      },
+      documentAnalysis: {
+        type: Boolean,
+        default: true,
+      },
+      meetingMode: {
+        type: Boolean,
+        default: true,
+      },
+      semanticSearch: {
+        type: Boolean,
+        default: true,
+      },
+      studyMode: {
+        type: Boolean,
+        default: true,
+      },
+      analytics: {
+        type: Boolean,
+        default: true,
+      },
+      // Privacy controls (Section 6)
+      excludeMyMessages: {
+        type: Boolean,
+        default: false,
+      },
+      redactionEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      retentionDays: {
+        type: Number,
+        default: 90,
+      },
       autoTranslateConversations: [
         {
           type: mongoose.Schema.Types.ObjectId,

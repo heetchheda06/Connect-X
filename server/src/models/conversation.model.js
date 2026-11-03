@@ -73,6 +73,33 @@ const conversationSchema = new mongoose.Schema(
       sparse: true,
       unique: true,
     },
+    // AI Conversation Mode & Consent (Section 6)
+    ai: {
+      mode: {
+        type: String,
+        enum: ['off', 'on_demand', 'auto'],
+        default: 'off',
+      },
+      setBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      setAt: {
+        type: Date,
+        default: null,
+      },
+    },
+    // Members who have opted out their messages from AI processing
+    optOutMembers: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

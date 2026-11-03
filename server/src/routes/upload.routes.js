@@ -30,11 +30,23 @@ const ALLOWED_MIME_TYPES = [
   // Archives
   'application/zip',
   'application/x-zip-compressed',
+  // Audio / Voice notes
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp3',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/mp4',
 ];
 
 const ALLOWED_EXTENSIONS = [
   '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip'
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip',
+  '.webm', '.ogg', '.mp3', '.wav', '.m4a', '.aac', '.mp4'
 ];
 
 router.post(

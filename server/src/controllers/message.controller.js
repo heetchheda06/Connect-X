@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import Translation from '../models/translation.model.js';
+import { assistantService } from '../services/ai/assistantService.js';
+import { voiceService } from '../services/ai/voiceService.js';
 
 /**
  * Get paginated messages for a conversation
@@ -142,8 +144,12 @@ export const sendMessage = async (req, res, next) => {
     // Determine message type
     let determinedType = type;
     if (attachment && type === 'text') {
-      determinedType = attachment.mimeType?.startsWith('image/') ? 'image' : 'file';
+      if (attachment.mimeType?.startsWith('image/')) determinedType = 'image';
+      else if (attachment.mimeType?.startsWith('audio/')) determinedType = 'voice';
+      else determinedType = 'file';
     }
+
+    const { aiCard = null } = req.body;
 
     const message = await Message.create({
       conversation: conversationId,
@@ -151,6 +157,7 @@ export const sendMessage = async (req, res, next) => {
       type: determinedType,
       content: content.trim(),
       attachment,
+      aiCard: aiCard || null,
       replyTo: replyTo || null,
       deliveredTo: [currentUserId],
       readBy: [{ user: currentUserId, readAt: new Date() }],
@@ -190,6 +197,39 @@ export const sendMessage = async (req, res, next) => {
           lastMessage: populated,
           senderId: currentUserId.toString(),
         });
+      }
+
+      // In-chat AI Assistant trigger: Check for @connectx mention
+      if (
+        message.content?.toLowerCase().includes('@connectx') &&
+        conversation.ai?.mode !== 'off'
+      ) {
+        setTimeout(() => {
+          assistantService
+            .handleInChatMention({
+              message: populated,
+              conversationId,
+              senderId: currentUserId,
+              socketIo: io,
+            })
+            .catch((err) => console.error('[Assistant Mention Error]:', err.message));
+        }, 300);
+      }
+
+      // Automatic Voice Note Transcription trigger
+      if (
+        determinedType === 'voice' ||
+        (attachment && attachment.mimeType?.startsWith('audio/'))
+      ) {
+        setTimeout(() => {
+          voiceService
+            .transcribeMessage({
+              messageId: message._id,
+              userId: currentUserId,
+              socketIo: io,
+            })
+            .catch((err) => console.log('[Voice STT Background]:', err.message));
+        }, 300);
       }
     }
 

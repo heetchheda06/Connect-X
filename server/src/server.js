@@ -9,6 +9,7 @@ import { createApp } from './app.js';
 import { socketAuthMiddleware } from './sockets/socket.auth.js';
 import { registerSocketHandlers } from './sockets/socket.handler.js';
 import { initFirebaseAdmin } from './config/firebaseAdmin.js';
+import { reminderScheduler } from './services/reminderScheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,9 @@ export const io = new SocketIOServer(httpServer, {
 // Register Socket.IO authentication and handlers
 io.use(socketAuthMiddleware);
 registerSocketHandlers(io);
+
+// Start background schedulers
+reminderScheduler.start(io);
 
 // Provide io instance to express app for REST-triggered broadcasts
 app.set('io', io);

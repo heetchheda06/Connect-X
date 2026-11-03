@@ -56,3 +56,4 @@ test('AI Prompts - Tone Assist & Smart Replies include prompt injection defense'
   assert.ok(TONE_ASSIST_PROMPT.includes('SECURITY INSTRUCTION'));
   assert.ok(TONE_ASSIST_PROMPT.includes('<chat_data>'));
 });
+

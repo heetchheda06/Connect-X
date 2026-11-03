@@ -2,6 +2,12 @@ import User from '../models/user.model.js';
 import { SUPPORTED_LANGUAGES, isValidTargetLanguage } from '../services/ai/languages.js';
 import { translationService } from '../services/ai/translationService.js';
 import { smartReplyService } from '../services/ai/smartReplyService.js';
+import { voiceService } from '../services/ai/voiceService.js';
+import { summaryService } from '../services/ai/summaryService.js';
+import { askChatService } from '../services/ai/askChatService.js';
+import { assistantService } from '../services/ai/assistantService.js';
+import { documentService } from '../services/ai/documentService.js';
+import { semanticSearchService } from '../services/ai/semanticSearchService.js';
 import { env } from '../config/env.js';
 
 /**
@@ -228,5 +234,218 @@ export const rewriteDraft = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Transcribe a voice note and generate summary
+ * POST /api/ai/transcribe
+ */
+export const transcribeVoiceMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.body;
+    const io = req.app.get('io');
+    const result = await voiceService.transcribeMessage({
+      messageId,
+      userId: req.user._id,
+      socketIo: io,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Transcription completed',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Generate Catch-Up summary for conversation
+ * POST /api/ai/summary
+ */
+export const generateCatchUpSummary = async (req, res, next) => {
+  try {
+    const { conversationId, style = 'brief', range = 50 } = req.body;
+    const result = await summaryService.generateSummary({
+      conversationId,
+      userId: req.user._id,
+      style,
+      range: Number(range),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Catch-Up summary generated',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Share summary card to conversation chat
+ * POST /api/ai/summary/:id/share
+ */
+export const shareSummaryCard = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const io = req.app.get('io');
+    const message = await summaryService.shareSummaryToChat({
+      summaryId: id,
+      userId: req.user._id,
+      socketIo: io,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Summary shared to chat',
+      data: { message },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Ask This Chat Q&A
+ * POST /api/ai/ask
+ */
+export const askThisChat = async (req, res, next) => {
+  try {
+    const { conversationId, question, threadId } = req.body;
+    const result = await askChatService.ask({
+      conversationId,
+      userId: req.user._id,
+      question,
+      threadId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Answer generated',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Private ConnectX AI Assistant Chat
+ * POST /api/ai/assistant
+ */
+export const chatAssistant = async (req, res, next) => {
+  try {
+    const { message, threadId } = req.body;
+    const result = await assistantService.chatPrivate({
+      userId: req.user._id,
+      message,
+      threadId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Assistant response generated',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * AI Document Analysis
+ * POST /api/ai/documents/analyze
+ */
+export const analyzeDocument = async (req, res, next) => {
+  try {
+    const { messageId } = req.body;
+    const result = await documentService.analyzeDocument({
+      messageId,
+      userId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Document analyzed successfully',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Ask Document Q&A
+ * POST /api/ai/documents/ask
+ */
+export const askDocument = async (req, res, next) => {
+  try {
+    const { messageId, question } = req.body;
+    const result = await documentService.askDocument({
+      messageId,
+      question,
+      userId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Document answered',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Search AI messages (hybrid & semantic)
+ * GET /api/ai/search
+ */
+export const searchAiMessages = async (req, res, next) => {
+  try {
+    const { q, conversationId, mode = 'hybrid' } = req.query;
+    const result = await semanticSearchService.searchMessages({
+      query: q,
+      userId: req.user._id,
+      conversationId,
+      mode,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Search completed',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Ask All My Chats
+ * POST /api/ai/ask-all
+ */
+export const askAllMyChats = async (req, res, next) => {
+  try {
+    const { question } = req.body;
+    const result = await semanticSearchService.askAllMyChats({
+      userId: req.user._id,
+      question,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Answer across chats generated',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
 
 

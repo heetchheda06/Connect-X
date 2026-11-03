@@ -10,7 +10,10 @@ import {
   Check,
   RotateCw,
   Wand2,
-  ArrowRight
+  ArrowRight,
+  Mic,
+  Square,
+  Trash2
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
@@ -51,6 +54,15 @@ export default function Composer({ onSendMessage, disabled }) {
   const [filePreviewUrl, setFilePreviewUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const mediaStreamRef = useRef(null);
 
   const typingTimerRef = useRef(null);
   const inputRef = useRef(null);
@@ -241,6 +253,129 @@ export default function Composer({ onSendMessage, disabled }) {
         isRetry: true,
       });
     }
+  };
+
+  // Clean up audio tracks on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
+  const formatRecordTime = (sec) => {
+    const mins = Math.floor(sec / 60);
+    const secs = sec % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Voice recording is not supported in this browser');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Mic access error:', err);
+      toast.error('Microphone access is required to record voice notes');
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  const finishAndSendVoiceRecording = () => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    const duration = recordingSeconds;
+
+    mediaRecorderRef.current.onstop = async () => {
+      try {
+        setIsProcessingAudio(true);
+        const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+        if (audioBlob.size < 100) {
+          toast.error('Audio recording too short');
+          return;
+        }
+
+        const audioFile = new File([audioBlob], `voice-note-${Date.now()}.webm`, {
+          type: mimeType,
+        });
+
+        const formData = new FormData();
+        formData.append('file', audioFile);
+
+        const uploadRes = await uploadFileApi(formData);
+        if (uploadRes.success && uploadRes.data) {
+          onSendMessage({
+            content: '',
+            attachment: {
+              ...uploadRes.data,
+              durationSec: Math.max(duration, 1),
+            },
+            type: 'voice',
+          });
+          toast.success('Voice note sent! 🎙️');
+        } else {
+          throw new Error(uploadRes.message || 'Audio upload failed');
+        }
+      } catch (err) {
+        console.error('Voice send error:', err);
+        toast.error(err.response?.data?.message || err.message || 'Failed to send voice note');
+      } finally {
+        setIsProcessingAudio(false);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+        audioChunksRef.current = [];
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          mediaStreamRef.current = null;
+        }
+      }
+    };
+
+    mediaRecorderRef.current.stop();
   };
 
   const handleSubmit = async (e) => {
@@ -574,42 +709,109 @@ export default function Composer({ onSendMessage, disabled }) {
           </div>
         </div>
 
-        {/* Input Bar */}
-        <div className="flex-1 relative">
-          <input
-            ref={inputRef}
-            type="text"
-            value={text}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            disabled={isUploading || disabled}
-            placeholder={
-              selectedFile
-                ? 'Add an optional caption...'
-                : 'Type a message (or paste an image)...'
-            }
-            className="w-full px-4 py-2.5 text-xs sm:text-sm bg-surface-alt border border-border-main rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all shadow-subtle"
-          />
-        </div>
+        {/* Input Bar or Live Voice Recording Bar */}
+        {isRecording ? (
+          <div className="flex-1 flex items-center justify-between px-3 sm:px-4 py-1.5 bg-brand-50/70 rounded-button border border-brand-300 animate-fade-in shadow-subtle">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-danger opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-status-danger" />
+              </span>
+              <span className="text-[11px] font-bold text-status-danger tracking-wider">REC</span>
+              <span className="text-xs font-mono font-semibold text-text-primary ml-1">
+                {formatRecordTime(recordingSeconds)}
+              </span>
+            </div>
 
-        {/* Send / Upload Button */}
-        <button
-          type="submit"
-          disabled={(!text.trim() && !selectedFile) || isUploading || disabled}
-          className={`p-2.5 rounded-button font-medium text-white shadow-brand transition-all duration-200 flex items-center justify-center ${
-            text.trim() || selectedFile
-              ? 'bg-brand-gradient hover:shadow-brand-lg scale-100 active:scale-95'
-              : 'bg-brand-300 opacity-60 cursor-not-allowed'
-          }`}
-          title="Send message"
-        >
-          {isUploading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-white" />
+            {/* Audio Wave Visualizer */}
+            <div className="flex items-center gap-1">
+              {[35, 65, 25, 80, 50, 75, 40, 95, 60, 30].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-0.5 bg-brand-500 rounded-full transition-all duration-150"
+                  style={{
+                    height: `${Math.max(6, (h * ((recordingSeconds + i) % 4 + 1)) / 4)}px`,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={cancelVoiceRecording}
+                disabled={isProcessingAudio}
+                className="p-1.5 rounded-full hover:bg-status-danger/10 text-status-danger transition-colors"
+                title="Discard recording"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={finishAndSendVoiceRecording}
+                disabled={isProcessingAudio}
+                className="p-1.5 rounded-full bg-brand-500 hover:bg-brand-600 text-white shadow-subtle transition-all"
+                title="Send voice note"
+              >
+                {isProcessingAudio ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 relative">
+            <input
+              ref={inputRef}
+              type="text"
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              disabled={isUploading || disabled}
+              placeholder={
+                selectedFile
+                  ? 'Add an optional caption...'
+                  : 'Type a message (or paste an image)...'
+              }
+              className="w-full px-4 py-2.5 text-xs sm:text-sm bg-surface-alt border border-border-main rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all shadow-subtle"
+            />
+          </div>
+        )}
+
+        {/* Send or Voice Record Mic Button */}
+        {!isRecording && (
+          !text.trim() && !selectedFile ? (
+            <button
+              type="button"
+              onClick={startVoiceRecording}
+              disabled={disabled}
+              className="p-2.5 rounded-button font-medium text-white bg-brand-gradient hover:shadow-brand-lg scale-100 active:scale-95 transition-all shadow-brand flex items-center justify-center"
+              title="Record Voice Note 🎙️"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
           ) : (
-            <Send className="w-4 h-4" />
-          )}
-        </button>
+            <button
+              type="submit"
+              disabled={(!text.trim() && !selectedFile) || isUploading || disabled}
+              className={`p-2.5 rounded-button font-medium text-white shadow-brand transition-all duration-200 flex items-center justify-center ${
+                text.trim() || selectedFile
+                  ? 'bg-brand-gradient hover:shadow-brand-lg scale-100 active:scale-95'
+                  : 'bg-brand-300 opacity-60 cursor-not-allowed'
+              }`}
+              title="Send message"
+            >
+              {isUploading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          )
+        )}
       </form>
     </div>
   );

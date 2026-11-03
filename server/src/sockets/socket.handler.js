@@ -1,6 +1,8 @@
 import presenceService from '../services/presence.service.js';
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
+import assistantService from '../services/ai/assistantService.js';
+import voiceService from '../services/ai/voiceService.js';
 
 export const registerSocketHandlers = (io) => {
   // Store typing auto-stop timers in memory: Map<`${socketId}_${convId}`, NodeJS.Timeout>
@@ -99,11 +101,11 @@ export const registerSocketHandlers = (io) => {
     // ==================== EVENT: message:send ====================
     socket.on('message:send', async (payload, callback) => {
       try {
-        const { conversationId, content = '', type = 'text', attachment = null, replyTo = null } = payload;
+        const { conversationId, content = '', type = 'text', attachment = null, replyTo = null, aiCard = null } = payload;
 
-        if (!conversationId || (!content.trim() && !attachment)) {
+        if (!conversationId || (!content.trim() && !attachment && !aiCard)) {
           if (typeof callback === 'function') {
-            callback({ success: false, error: 'Message content or attachment is required' });
+            callback({ success: false, error: 'Message content, attachment, or card is required' });
           }
           return;
         }
@@ -128,15 +130,22 @@ export const registerSocketHandlers = (io) => {
         const deliveredTo = [user._id, ...onlineRecipientIds];
         const readBy = [{ user: user._id, readAt: new Date() }];
 
+        // Determine message type accurately
+        let determinedType = type;
+        if (attachment && type === 'text') {
+          if (attachment.mimeType?.startsWith('image/')) determinedType = 'image';
+          else if (attachment.mimeType?.startsWith('audio/')) determinedType = 'voice';
+          else determinedType = 'file';
+        }
+
         // Create message in database
         const message = await Message.create({
           conversation: conversationId,
           sender: user._id,
-          type: attachment && type === 'text'
-            ? (attachment.mimeType?.startsWith('image/') ? 'image' : 'file')
-            : type,
+          type: determinedType,
           content: content.trim(),
           attachment,
+          aiCard: aiCard || null,
           replyTo: replyTo || null,
           deliveredTo,
           readBy,
@@ -177,6 +186,39 @@ export const registerSocketHandlers = (io) => {
         // 3. Acknowledge sender
         if (typeof callback === 'function') {
           callback({ success: true, data: { message: populatedMessage } });
+        }
+
+        // 4. In-chat AI Assistant trigger: Check for @connectx mention
+        if (
+          message.content?.toLowerCase().includes('@connectx') &&
+          conversation.ai?.mode !== 'off'
+        ) {
+          setTimeout(() => {
+            assistantService
+              .handleInChatMention({
+                message: populatedMessage,
+                conversationId,
+                senderId: userId,
+                socketIo: io,
+              })
+              .catch((err) => console.error('[Assistant Mention Error]:', err.message));
+          }, 300);
+        }
+
+        // 5. Automatic Voice Note Transcription trigger
+        if (
+          determinedType === 'voice' ||
+          (attachment && attachment.mimeType?.startsWith('audio/'))
+        ) {
+          setTimeout(() => {
+            voiceService
+              .transcribeMessage({
+                messageId: message._id,
+                userId,
+                socketIo: io,
+              })
+              .catch((err) => console.log('[Voice STT Background]:', err.message));
+          }, 300);
         }
       } catch (err) {
         console.error(`[Socket Error] message:send: ${err.message}`);

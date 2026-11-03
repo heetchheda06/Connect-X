@@ -3,6 +3,7 @@ import { formatMessageTime } from '../../utils/date.js';
 import { formatFileSize, isImageFile, getMediaUrl } from '../../utils/file.js';
 import { useAiStore } from '../../store/aiStore.js';
 import { useTranslationStore } from '../../store/translationStore.js';
+import VoicePlayer from './VoicePlayer.jsx';
 import { 
   Check, 
   CheckCheck, 
@@ -18,7 +19,11 @@ import {
   Languages,
   Sparkles,
   Loader2,
-  RotateCw
+  RotateCw,
+  Bell,
+  FileSearch,
+  CheckCircle2,
+  Calendar
 } from 'lucide-react';
 
 export default function MessageBubble({
@@ -29,14 +34,18 @@ export default function MessageBubble({
   onDelete,
   onImageClick,
   onInfo,
+  onRemind,
+  onAnalyzeDoc,
 }) {
   const isDeleted = message.isDeletedForEveryone;
   const isRead = message.readBy && message.readBy.length > 1;
   const isDelivered = message.deliveredTo && message.deliveredTo.length > 1;
 
   const attachment = message.attachment;
-  const hasImage = attachment && isImageFile(attachment.mimeType, attachment.name);
-  const hasFile = attachment && !hasImage;
+  const isVoice = message.type === 'voice' || (attachment && attachment.mimeType?.startsWith('audio/'));
+  const isAiCard = message.type === 'ai_card';
+  const hasImage = !isVoice && attachment && isImageFile(attachment.mimeType, attachment.name);
+  const hasFile = !isVoice && attachment && !hasImage;
   const [imageFailed, setImageFailed] = React.useState(false);
 
   const { settings: aiSettings, languages } = useAiStore();
@@ -128,6 +137,30 @@ export default function MessageBubble({
           </div>
         ) : (
           <>
+            {/* Voice Note Player */}
+            {isVoice && (
+              <VoicePlayer message={message} isOwn={isOwn} />
+            )}
+
+            {/* AI Generated Card (Summary, Task, Decision) */}
+            {isAiCard && (
+              <div
+                className={`mb-2 p-3 rounded-xl border space-y-2 select-text ${
+                  isOwn
+                    ? 'bg-white/15 border-white/20 text-white'
+                    : 'bg-brand-50/70 border-brand-200 text-text-primary'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-bold text-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-500 fill-brand-500" />
+                  <span>{message.aiCard?.title || 'ConnectX AI Insight'}</span>
+                </div>
+                <div className="text-xs leading-relaxed whitespace-pre-wrap">
+                  {message.content}
+                </div>
+              </div>
+            )}
+
             {/* Image Attachment Preview */}
             {hasImage && !imageFailed && (
               <div className="mb-2 overflow-hidden rounded-xl bg-deep-900/10 border border-black/5">
@@ -145,45 +178,65 @@ export default function MessageBubble({
             {/* Document / File Attachment Card or Image Preview Fallback */}
             {(hasFile || (hasImage && imageFailed)) && (
               <div
-                className={`mb-2 p-2.5 rounded-xl border flex items-center justify-between gap-3 ${
+                className={`mb-2 p-2.5 rounded-xl border flex flex-col gap-2 ${
                   isOwn
                     ? 'bg-white/15 border-white/20 text-white'
                     : 'bg-surface-alt border-border-main text-text-primary'
                 }`}
               >
-                <div className="flex items-center gap-2.5 overflow-hidden">
-                  <div className="p-2 rounded-lg bg-white shadow-subtle flex-shrink-0">
-                    {getFileIcon(attachment.name, attachment.mimeType)}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="p-2 rounded-lg bg-white shadow-subtle flex-shrink-0">
+                      {getFileIcon(attachment.name, attachment.mimeType)}
+                    </div>
+                    <div className="truncate">
+                      <p className="text-xs font-semibold truncate">
+                        {attachment.name}
+                      </p>
+                      <span className={`text-[10px] ${isOwn ? 'text-white/80' : 'text-text-muted'}`}>
+                        {formatFileSize(attachment.size)} {imageFailed ? '· (Preview unavailable)' : ''}
+                      </span>
+                    </div>
                   </div>
-                  <div className="truncate">
-                    <p className="text-xs font-semibold truncate">
-                      {attachment.name}
-                    </p>
-                    <span className={`text-[10px] ${isOwn ? 'text-white/80' : 'text-text-muted'}`}>
-                      {formatFileSize(attachment.size)} {imageFailed ? '· (Preview unavailable)' : ''}
-                    </span>
-                  </div>
+
+                  <a
+                    href={getMediaUrl(attachment.url)}
+                    download={attachment.name}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                      isOwn
+                        ? 'bg-white/20 hover:bg-white/30 text-white'
+                        : 'bg-surface hover:bg-surface-alt text-brand-600 border border-border-main'
+                    }`}
+                    title="Download file"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
                 </div>
 
-                <a
-                  href={getMediaUrl(attachment.url)}
-                  download={attachment.name}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
-                    isOwn
-                      ? 'bg-white/20 hover:bg-white/30 text-white'
-                      : 'bg-surface hover:bg-surface-alt text-brand-600 border border-border-main'
-                  }`}
-                  title="Download file"
-                >
-                  <Download className="w-4 h-4" />
-                </a>
+                {/* AI Document Analysis Trigger */}
+                {hasFile && onAnalyzeDoc && (
+                  <div className="pt-1.5 border-t border-border-main/40 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => onAnalyzeDoc(attachment)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                        isOwn
+                          ? 'bg-white/20 hover:bg-white/30 text-white'
+                          : 'bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 shadow-xs'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3 text-brand-500 fill-brand-500" />
+                      Analyze Document ✨
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Message Text / Caption */}
-            {message.content && (
+            {message.content && !isAiCard && (
               <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
                 {message.content}
               </p>
@@ -321,6 +374,16 @@ export default function MessageBubble({
               title="Reply"
             >
               <Reply className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onRemind && (
+            <button
+              onClick={() => onRemind(message)}
+              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
+              title="Set Reminder ✨"
+            >
+              <Bell className="w-3.5 h-3.5 text-amber-500" />
             </button>
           )}
 
