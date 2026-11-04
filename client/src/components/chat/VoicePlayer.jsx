@@ -37,7 +37,9 @@ export default function VoicePlayer({ message, isOwn }) {
 
   const [localPlaying, setLocalPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(attachment?.durationSec || 0);
+  const [duration, setDuration] = useState(
+    attachment?.durationSec && Number.isFinite(attachment.durationSec) ? attachment.durationSec : 0
+  );
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
 
   const audioRef = useRef(null);
@@ -77,13 +79,26 @@ export default function VoicePlayer({ message, isOwn }) {
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const cur = audioRef.current.currentTime;
+      setCurrentTime(cur);
+      // For recorded WebM audio where browser sets initial duration to Infinity
+      if (!Number.isFinite(duration) || duration <= 0) {
+        if (Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
+          setDuration(audioRef.current.duration);
+        } else if (attachment?.durationSec && Number.isFinite(attachment.durationSec)) {
+          setDuration(attachment.durationSec);
+        } else if (cur > 0) {
+          setDuration(cur);
+        }
+      }
     }
   };
 
   const handleLoadedMetadata = () => {
-    if (audioRef.current && audioRef.current.duration) {
+    if (audioRef.current && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
       setDuration(audioRef.current.duration);
+    } else if (attachment?.durationSec && Number.isFinite(attachment.durationSec)) {
+      setDuration(attachment.durationSec);
     }
   };
 
@@ -102,7 +117,7 @@ export default function VoicePlayer({ message, isOwn }) {
   };
 
   const formatSeconds = (sec) => {
-    if (!sec || isNaN(sec)) return '0:00';
+    if (!sec || !Number.isFinite(sec) || isNaN(sec) || sec <= 0) return '0:00';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -151,7 +166,7 @@ export default function VoicePlayer({ message, isOwn }) {
           <input
             type="range"
             min="0"
-            max={duration || 100}
+            max={Number.isFinite(duration) && duration > 0 ? duration : 100}
             value={currentTime}
             onChange={handleSeek}
             className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-brand-500 bg-black/10"

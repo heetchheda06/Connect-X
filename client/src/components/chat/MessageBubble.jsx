@@ -472,10 +472,21 @@ export default function MessageBubble({
                 )}
 
                 {/* Message Text */}
-                {message.content && !isAiCard && !isPoll && (
-                  <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
-                    {message.content}
-                  </p>
+                {message.content && !isAiCard && !isPoll && !isVoice && (
+                  (() => {
+                    let displayContent = '';
+                    if (typeof message.content === 'string') {
+                      displayContent = message.content === '[object Object]' ? '' : message.content;
+                    } else if (typeof message.content === 'object' && message.content !== null) {
+                      displayContent = message.content.text || message.content.content || message.content.message || '';
+                    }
+                    if (!displayContent) return null;
+                    return (
+                      <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
+                        {displayContent}
+                      </p>
+                    );
+                  })()
                 )}
 
                 {/* Translation Tinted Block */}

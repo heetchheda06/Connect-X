@@ -105,7 +105,15 @@ export const registerSocketHandlers = (io) => {
     // ==================== EVENT: message:send ====================
     socket.on('message:send', async (payload, callback) => {
       try {
-        const { conversationId, content = '', type = 'text', attachment = null, replyTo = null, aiCard = null } = payload;
+        let { conversationId, content = '', type = 'text', attachment = null, replyTo = null, aiCard = null } = payload;
+
+        if (typeof content === 'object' && content !== null) {
+          content = content.text || content.content || content.message || '';
+        } else if (content === '[object Object]') {
+          content = '';
+        } else if (typeof content !== 'string') {
+          content = String(content || '');
+        }
 
         if (!conversationId || (!content.trim() && !attachment && !aiCard)) {
           if (typeof callback === 'function') {

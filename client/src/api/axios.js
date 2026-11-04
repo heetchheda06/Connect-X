@@ -24,7 +24,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401 unauthorized
+// Response interceptor: handle 401 unauthorized & sanitize error messages
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -33,6 +33,22 @@ api.interceptors.response.use(
       localStorage.removeItem('connectx_token');
       localStorage.removeItem('connectx_user');
     }
+
+    // Sanitize raw Gemini API JSON quota/rate limit error messages
+    if (error.response?.data?.message) {
+      const rawMsg = error.response.data.message;
+      if (typeof rawMsg === 'string') {
+        if (rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('quota') || rawMsg.includes('429')) {
+          error.response.data.message = 'AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.';
+        } else if (rawMsg.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(rawMsg);
+            error.response.data.message = parsed.error?.message || 'AI request failed. Please try again later.';
+          } catch (_) {}
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );

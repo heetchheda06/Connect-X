@@ -140,7 +140,15 @@ export const getMessages = async (req, res, next) => {
 export const sendMessage = async (req, res, next) => {
   try {
     const { id: conversationId } = req.params;
-    const { content = '', type = 'text', attachment = null, replyTo = null } = req.body;
+    let { content = '', type = 'text', attachment = null, replyTo = null } = req.body;
+    let cleanContent = '';
+    if (typeof content === 'string') {
+      cleanContent = content === '[object Object]' ? '' : content.trim();
+    } else if (typeof content === 'object' && content !== null) {
+      cleanContent = (content.text || content.content || content.message || '').trim();
+    } else if (content) {
+      cleanContent = String(content).trim();
+    }
     const currentUserId = req.user._id;
 
     const conversation = await Conversation.findById(conversationId);
@@ -198,7 +206,7 @@ export const sendMessage = async (req, res, next) => {
       mentions = [],
     } = req.body;
 
-    if (!content.trim() && !attachment && !poll && !call) {
+    if (!cleanContent && !attachment && !poll && !call) {
       return res.status(400).json({
         success: false,
         message: 'Message must contain either text content, attachment, poll, or call event',
@@ -249,7 +257,7 @@ export const sendMessage = async (req, res, next) => {
       conversation: conversationId,
       sender: currentUserId,
       type: determinedType,
-      content: content.trim(),
+      content: cleanContent,
       attachment,
       aiCard: aiCard || null,
       poll: poll

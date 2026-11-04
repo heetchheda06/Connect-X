@@ -9,8 +9,28 @@ export const notFoundHandler = (req, res, next) => {
 export const errorHandler = (err, req, res, next) => {
   console.error('[Error Handler]', err);
 
-  const statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
-  const message = err.message || 'Internal server error';
+  let statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
+  let message = err.message || 'Internal server error';
+
+  // Sanitize raw Google Gemini API quota/rate limit error JSON
+  if (typeof message === 'string') {
+    if (message.includes('RESOURCE_EXHAUSTED') || message.includes('quota') || /429/.test(message)) {
+      statusCode = 429;
+      message = 'AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.';
+    } else if (message.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed.error?.message) {
+          if (parsed.error?.code === 429 || parsed.error?.status === 'RESOURCE_EXHAUSTED') {
+            statusCode = 429;
+            message = 'AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.';
+          } else {
+            message = parsed.error.message;
+          }
+        }
+      } catch (_) {}
+    }
+  }
 
   res.status(statusCode).json({
     success: false,
