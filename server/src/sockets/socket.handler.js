@@ -3,6 +3,7 @@ import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
 import assistantService from '../services/ai/assistantService.js';
 import voiceService from '../services/ai/voiceService.js';
+import registerCallSocketHandlers from './callSocket.js';
 
 export const registerSocketHandlers = (io) => {
   // Store typing auto-stop timers in memory: Map<`${socketId}_${convId}`, NodeJS.Timeout>
@@ -14,6 +15,9 @@ export const registerSocketHandlers = (io) => {
 
     // 1. Join personal room for targeted alerts (e.g. conversation list updates)
     socket.join(`user:${userId}`);
+
+    // Register WebRTC call signaling handlers
+    registerCallSocketHandlers(io, socket);
 
     // 2. Register multi-device socket presence
     const { isFirstConnection } = await presenceService.addSocket(userId, socket.id);
