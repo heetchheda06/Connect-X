@@ -22,6 +22,10 @@ import meetingRoutes from './routes/meeting.routes.js';
 import studyRoutes from './routes/study.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import conversationStateRoutes from './routes/conversationState.routes.js';
+import contactRoutes from './routes/contact.routes.js';
+import blockRoutes from './routes/block.routes.js';
+import reportRoutes from './routes/report.routes.js';
+import settingsRoutes from './routes/settings.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
 
@@ -132,6 +136,10 @@ export const createApp = () => {
   app.use('/api/study', studyRoutes);
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api', conversationStateRoutes);
+  app.use('/api/contacts', contactRoutes);
+  app.use('/api/blocks', blockRoutes);
+  app.use('/api/reports', reportRoutes);
+  app.use('/api/settings', settingsRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);
