@@ -45,7 +45,7 @@ export class ContextGateway {
       throw err;
     }
 
-    if (!user.aiSettings?.enabled) {
+    if (user.aiSettings && user.aiSettings.enabled === false && !['tone_assist', 'ask_chat'].includes(feature)) {
       const err = new Error('AI features are disabled in your personal settings.');
       err.status = 403;
       err.code = 'AI_DISABLED_USER';

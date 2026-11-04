@@ -81,6 +81,11 @@ export const createTask = async (req, res, next) => {
       .populate('assignee', 'name username avatar')
       .populate('createdBy', 'name username');
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to(task.conversation.toString()).emit('task:created', { task: populated });
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Task created successfully',

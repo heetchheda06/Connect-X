@@ -217,7 +217,16 @@ export const createOrGetDirectConversation = async (req, res, next) => {
     // Deterministic key to prevent race conditions or duplicate 1-to-1 chats
     const directKey = [currentUserId.toString(), recipientId.toString()].sort().join('_');
 
-    let conversation = await Conversation.findOne({ directKey })
+    let conversation = await Conversation.findOne({
+      $or: [
+        { directKey },
+        {
+          type: 'direct',
+          'members.user': { $all: [currentUserId, recipientId] },
+          members: { $size: 2 },
+        },
+      ],
+    })
       .populate('members.user', '_id name username avatar isOnline lastSeen')
       .populate({
         path: 'lastMessage',
@@ -240,12 +249,32 @@ export const createOrGetDirectConversation = async (req, res, next) => {
 
       conversation = await Conversation.findById(conversation._id)
         .populate('members.user', '_id name username avatar isOnline lastSeen');
+    } else if (!conversation.directKey) {
+      conversation.directKey = directKey;
+      await conversation.save();
     }
+
+    // Always ensure conversation is unhidden for current user
+    await ConversationUserState.findOneAndUpdate(
+      { user: currentUserId, conversation: conversation._id },
+      { $set: { hidden: false } },
+      { upsert: true, new: true }
+    );
+
+    const convObj = conversation.toObject ? conversation.toObject() : conversation;
 
     return res.status(200).json({
       success: true,
       message: 'Direct conversation ready',
-      data: { conversation },
+      data: {
+        conversation: {
+          ...convObj,
+          unreadCount: 0,
+          isPinned: false,
+          isArchived: false,
+          isMuted: false,
+        },
+      },
     });
   } catch (error) {
     next(error);

@@ -27,8 +27,11 @@ import {
   Copy,
   Bot,
   User as UserIcon,
-  Globe
+  Globe,
+  Search,
+  History
 } from 'lucide-react';
+import useSocket from '../../hooks/useSocket.js';
 import { 
   generateSummaryApi, 
   shareSummaryApi, 
@@ -73,6 +76,8 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [summaryStyle, setSummaryStyle] = useState('brief');
 
+  const { socket } = useSocket();
+
   // Tasks state
   const [tasks, setTasks] = useState([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -80,6 +85,8 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
   const [taskFilter, setTaskFilter] = useState('all');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [newTaskDueAt, setNewTaskDueAt] = useState('');
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   // Decisions state
@@ -92,6 +99,8 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
   const [askMessages, setAskMessages] = useState([]);
   const [askThreadId, setAskThreadId] = useState(null);
   const [isLoadingThread, setIsLoadingThread] = useState(false);
+  const [showQuestionsHistory, setShowQuestionsHistory] = useState(false);
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
   const chatBottomRef = React.useRef(null);
 
   // Meeting Mode state
@@ -126,6 +135,44 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
       chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [askMessages, isAsking, activeTab]);
+
+  // Real-time task synchronization across participants
+  useEffect(() => {
+    if (!socket || !conversationId) return;
+
+    const convIdStr = (conversationId?._id || conversationId)?.toString();
+
+    const onTaskCreated = ({ task }) => {
+      const taskConv = (task?.conversation?._id || task?.conversation)?.toString();
+      if (taskConv === convIdStr) {
+        setTasks((prev) => {
+          if (prev.some((t) => t._id === task._id)) return prev;
+          return [task, ...prev];
+        });
+      }
+    };
+
+    const onTaskUpdated = ({ task }) => {
+      const taskConv = (task?.conversation?._id || task?.conversation)?.toString();
+      if (taskConv === convIdStr) {
+        setTasks((prev) => prev.map((t) => (t._id === task._id ? task : t)));
+      }
+    };
+
+    const onTaskDeleted = ({ taskId }) => {
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    };
+
+    socket.on('task:created', onTaskCreated);
+    socket.on('task:updated', onTaskUpdated);
+    socket.on('task:deleted', onTaskDeleted);
+
+    return () => {
+      socket.off('task:created', onTaskCreated);
+      socket.off('task:updated', onTaskUpdated);
+      socket.off('task:deleted', onTaskDeleted);
+    };
+  }, [socket, conversationId]);
 
   const loadInitialData = () => {
     if (activeTab === 'tasks') fetchTasks();
@@ -238,14 +285,19 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
     if (!newTaskTitle.trim() || isCreatingTask) return;
     try {
       setIsCreatingTask(true);
+      const convIdStr = (conversationId?._id || conversationId)?.toString();
       const res = await createTaskApi({
-        conversationId,
+        conversationId: convIdStr,
         title: newTaskTitle.trim(),
         priority: newTaskPriority,
+        assignee: newTaskAssignee || null,
+        dueAt: newTaskDueAt || null,
       });
       if (res.success) {
         toast.success('Task created! 🎯');
         setNewTaskTitle('');
+        setNewTaskAssignee('');
+        setNewTaskDueAt('');
         fetchTasks();
       }
     } catch (err) {
@@ -666,6 +718,38 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
                   Add
                 </button>
               </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border-main/50">
+                <div>
+                  <label className="text-[10px] text-text-muted font-bold block mb-0.5">Assignee</label>
+                  <select
+                    value={newTaskAssignee}
+                    onChange={(e) => setNewTaskAssignee(e.target.value)}
+                    className="w-full px-2 py-1 rounded-lg bg-surface border border-border-main text-[11px] text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  >
+                    <option value="">Unassigned</option>
+                    {(conversation?.members || []).map((m) => {
+                      const u = m.user;
+                      if (!u) return null;
+                      return (
+                        <option key={u._id} value={u._id}>
+                          {u.name || u.username}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-text-muted font-bold block mb-0.5">Due Date</label>
+                  <input
+                    type="date"
+                    value={newTaskDueAt}
+                    onChange={(e) => setNewTaskDueAt(e.target.value)}
+                    className="w-full px-2 py-1 rounded-lg bg-surface border border-border-main text-[11px] text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-between text-[11px] text-text-muted px-0.5">
                 <span>Priority:</span>
                 <div className="flex gap-1">
@@ -778,6 +862,11 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
                                 <Sparkles className="w-2.5 h-2.5" /> AI
                               </span>
                             )}
+                            {task.assignee?.name && (
+                              <span className="px-1.5 py-0.5 rounded bg-surface border border-border-main text-text-secondary text-[9px] font-medium inline-flex items-center gap-1">
+                                👤 {task.assignee.name}
+                              </span>
+                            )}
                             {task.dueAt && (
                               <span className="text-[10px] text-brand-600 font-medium">
                                 Due {new Date(task.dueAt).toLocaleDateString()}
@@ -863,16 +952,84 @@ export default function AiDrawer({ isOpen, onClose, conversationId, conversation
                   <span className="text-[10px] text-text-muted block">Answers chat history & general questions</span>
                 </div>
               </div>
-              {askMessages.length > 0 && (
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={handleClearThread}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-                  title="Clear conversation"
+                  type="button"
+                  onClick={() => setShowQuestionsHistory((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    showQuestionsHistory
+                      ? 'bg-brand-500 text-white shadow-xs'
+                      : 'bg-surface-alt hover:bg-brand-50 text-text-primary border border-border-main'
+                  }`}
+                  title="View all questions you've asked"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Clear
+                  <History className="w-3.5 h-3.5" />
+                  <span>Questions ({askMessages.filter((m) => m.role === 'user').length})</span>
                 </button>
-              )}
+                {askMessages.length > 0 && (
+                  <button
+                    onClick={handleClearThread}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                    title="Clear conversation"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Clear
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Collapsible Questions History Panel */}
+            {showQuestionsHistory && (
+              <div className="mb-2 p-2.5 rounded-xl bg-surface border border-border-main shadow-subtle space-y-2 animate-fade-in flex-shrink-0">
+                <div className="flex items-center justify-between pb-1 border-b border-border-main/50">
+                  <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                    Questions Asked
+                  </span>
+                  <span className="text-[10px] text-brand-600 font-semibold">Click to re-ask or inspect</span>
+                </div>
+
+                {askMessages.filter((m) => m.role === 'user').length > 3 && (
+                  <div className="relative">
+                    <Search className="w-3 h-3 absolute left-2 top-2 text-text-muted" />
+                    <input
+                      type="text"
+                      value={historySearchTerm}
+                      onChange={(e) => setHistorySearchTerm(e.target.value)}
+                      placeholder="Filter asked questions..."
+                      className="w-full pl-7 pr-2 py-1 rounded-md bg-surface-alt border border-border-main text-[11px] text-text-primary focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    />
+                  </div>
+                )}
+
+                <div className="max-h-36 overflow-y-auto space-y-1">
+                  {askMessages.filter((m) => m.role === 'user').length === 0 ? (
+                    <p className="text-[11px] text-text-muted text-center py-2">
+                      No questions asked yet. Ask any question below!
+                    </p>
+                  ) : (
+                    askMessages
+                      .filter((m) => m.role === 'user')
+                      .filter((m) => !historySearchTerm || m.content.toLowerCase().includes(historySearchTerm.toLowerCase()))
+                      .map((userQ, idx) => (
+                        <button
+                          key={userQ.id || idx}
+                          type="button"
+                          onClick={() => {
+                            setAskQuery(userQ.content);
+                            setShowQuestionsHistory(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg bg-surface-alt hover:bg-brand-50 hover:text-brand-700 text-text-primary text-[11px] flex items-center justify-between group transition-colors border border-transparent hover:border-brand-200"
+                        >
+                          <span className="truncate pr-2">{idx + 1}. {userQ.content}</span>
+                          <span className="text-[9px] text-text-muted group-hover:text-brand-600 flex-shrink-0">
+                            {new Date(userQ.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </button>
+                      ))
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Chatbot Message Thread */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1 py-1">

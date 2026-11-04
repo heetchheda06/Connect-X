@@ -81,11 +81,23 @@ export const useChatStore = create((set, get) => ({
   fetchConversations: async () => {
     try {
       set({ loadingConversations: true });
-      const { viewArchived } = get();
+      const { viewArchived, activeConversationId, conversations: currentList } = get();
       const res = await getConversationsApi({ archived: viewArchived });
       if (res.success && res.data) {
+        const fetched = res.data.conversations || [];
+        // Preserve currently active conversation if not yet returned by backend
+        let merged = fetched;
+        if (activeConversationId) {
+          const activeConv = currentList.find(
+            (c) => c._id?.toString() === activeConversationId?.toString()
+          );
+          if (activeConv && !fetched.some((c) => c._id?.toString() === activeConversationId?.toString())) {
+            merged = [activeConv, ...fetched];
+          }
+        }
+
         set({
-          conversations: res.data.conversations || [],
+          conversations: merged,
           archivedCount: res.data.archivedCount || 0,
           loadingConversations: false,
         });

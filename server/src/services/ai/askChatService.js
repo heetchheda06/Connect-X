@@ -142,23 +142,57 @@ export class AskChatService {
 ${recentTurns ? `Previous Q&A Turns:\n${recentTurns}\n` : ''}
 User Question: "${question.trim()}"
 
-Search the chat history in <chat_data> and answer the question with precise citations.`;
+Instructions:
+- If this question relates to the conversation, messages, members, tasks, or decisions in <chat_data>, answer accurately based on the chat and cite sources.
+- If this question is a general question, conceptual explanation, technical question (e.g. "what is the role of fiber optic cable", "explain WebSockets", "write a note"), knowledge lookup, or general query, provide a thorough, helpful, and high-quality explanation. DO NOT say you couldn't find it in the chat.`;
 
-    const result = await llmService.generateStructured({
-      systemInstruction: ASK_CHAT_PROMPT,
-      prompt: `<chat_data label="chat_messages">\n${formattedWithIds}\n</chat_data>\n\n${userPrompt}`,
-      schema: askChatOutputSchema,
-      modelTier: env.aiModelSmart || env.aiModel,
-    });
+    let result = null;
+    try {
+      result = await llmService.generateStructured({
+        systemInstruction: ASK_CHAT_PROMPT,
+        prompt: `<chat_data label="chat_messages">\n${formattedWithIds}\n</chat_data>\n\n${userPrompt}`,
+        schema: askChatOutputSchema,
+        modelTier: env.aiModelSmart || env.aiModel,
+      });
+    } catch (llmErr) {
+      console.warn('[AskChatService] Structured call failed, falling back to direct text generation:', llmErr.message);
+    }
 
-    const answer = result?.answer || result?.data?.answer || "I couldn't find that in this chat.";
+    let answer = result?.answer || result?.data?.answer || '';
     const citations = Array.isArray(result?.citations)
       ? result.citations
       : Array.isArray(result?.data?.citations)
       ? result.data.citations
       : [];
     const confidence = typeof result?.confidence === 'number' ? result.confidence : 0.8;
-    const notFound = Boolean(result?.notFound);
+    let notFound = Boolean(result?.notFound);
+    let isFromChat = Boolean(result?.isFromChat || citations.length > 0);
+
+    // Fallback if structured generation returned empty or a false "not found" on a general query
+    const isExplicitChatQuery = /\b(this chat|this conversation|who said|in this room|messages here|mentioned here|we discussed)\b/i.test(question);
+    if ((!answer || answer.includes("couldn't find that in this chat") || notFound) && !isExplicitChatQuery) {
+      try {
+        const textFallback = await llmService.generateText({
+          feature: 'ask_chat_general_fallback',
+          systemInstruction: 'You are ConnectX AI Assistant. Provide a comprehensive, accurate, high-quality, and well-structured answer explaining the concept or answering the user question thoroughly.',
+          prompt: question.trim(),
+          tier: 'smart',
+        });
+        if (textFallback?.text) {
+          answer = textFallback.text;
+          notFound = false;
+          isFromChat = false;
+        }
+      } catch (fbErr) {
+        console.error('[AskChatService] Fallback text generation failed:', fbErr.message);
+      }
+    }
+
+    if (!answer) {
+      answer = notFound
+        ? "I checked this chat, and that wasn't mentioned by anyone here."
+        : "I'm here to help! Could you please clarify your question?";
+    }
 
     // 4. Append to thread
     const citationIds = citations
