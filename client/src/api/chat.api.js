@@ -276,6 +276,26 @@ export const getPrivacySettingsApi = async () => {
   return response.data;
 };
 
+export const getSettingsApi = async () => {
+  try {
+    const [pRes, nRes, cRes] = await Promise.all([
+      api.get('/settings/privacy').catch(() => ({ data: { data: {} } })),
+      api.get('/settings/notifications').catch(() => ({ data: { data: {} } })),
+      api.get('/settings/chat-preferences').catch(() => ({ data: { data: {} } })),
+    ]);
+    return {
+      success: true,
+      data: {
+        privacy: pRes.data?.data?.privacy || pRes.data?.data || {},
+        notifications: nRes.data?.data?.notifications || nRes.data?.data || {},
+        chatPreferences: cRes.data?.data?.chatPreferences || cRes.data?.data || {},
+      },
+    };
+  } catch (err) {
+    return { success: false, data: {} };
+  }
+};
+
 export const updatePrivacySettingsApi = async (data) => {
   const response = await api.put('/settings/privacy', data);
   return response.data;
