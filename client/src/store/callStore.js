@@ -3,6 +3,7 @@ import { useSocketStore } from './socketStore.js';
 import { getIceServersApi } from '../api/chat.api.js';
 
 let peerConnection = null;
+let pendingIceCandidates = [];
 
 export const useCallStore = create((set, get) => ({
   activeCall: null,      // { callId, conversationId, peer, type, status: 'ringing'|'connected'|'ended', durationSec }
@@ -23,18 +24,31 @@ export const useCallStore = create((set, get) => ({
       const socket = useSocketStore.getState().socket;
       if (!socket) throw new Error('Socket not connected');
 
-      // Request user media with front camera by default on mobile
+      // Request user media with crystal-clear echo cancellation and noise suppression
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: audioConstraints,
           video: type === 'video' ? { facingMode: 'user' } : false,
         });
       } catch (e) {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === 'video',
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: type === 'video' ? { facingMode: 'user' } : false,
+          });
+        } catch (e2) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: type === 'video',
+          });
+        }
       }
 
       set({
@@ -76,17 +90,30 @@ export const useCallStore = create((set, get) => ({
 
     try {
       const socket = useSocketStore.getState().socket;
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: audioConstraints,
           video: incomingCall.type === 'video' ? { facingMode: 'user' } : false,
         });
       } catch (e) {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: incomingCall.type === 'video',
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: incomingCall.type === 'video' ? { facingMode: 'user' } : false,
+          });
+        } catch (e2) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: incomingCall.type === 'video',
+          });
+        }
       }
 
       set({
@@ -157,7 +184,12 @@ export const useCallStore = create((set, get) => ({
       const { localStream } = get();
       const socket = useSocketStore.getState().socket;
 
-      let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+      let iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ];
       try {
         const res = await getIceServersApi();
         if (res.success && res.data?.iceServers) {
@@ -167,17 +199,21 @@ export const useCallStore = create((set, get) => ({
 
       peerConnection = new RTCPeerConnection({ iceServers });
 
-      // Add local tracks
+      // Add local tracks (audio and/or video)
       if (localStream) {
         localStream.getTracks().forEach((track) => {
           peerConnection.addTrack(track, localStream);
         });
       }
 
-      // Handle remote stream
+      // Handle remote stream and individual tracks (supports mobile Safari & Android Chrome)
       peerConnection.ontrack = (event) => {
         if (event.streams && event.streams[0]) {
           set({ remoteStream: event.streams[0] });
+        } else if (event.track) {
+          const currentRemote = get().remoteStream || new MediaStream();
+          currentRemote.addTrack(event.track);
+          set({ remoteStream: new MediaStream(currentRemote.getTracks()) });
         }
       };
 
@@ -229,6 +265,17 @@ export const useCallStore = create((set, get) => ({
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+
+      // Flush any queued ICE candidates that arrived before remoteDescription
+      while (pendingIceCandidates.length > 0) {
+        const candidate = pendingIceCandidates.shift();
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn('[WebRTC] Error applying buffered ICE candidate:', e);
+        }
+      }
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -250,6 +297,16 @@ export const useCallStore = create((set, get) => ({
     try {
       if (peerConnection) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+
+        // Flush any queued ICE candidates
+        while (pendingIceCandidates.length > 0) {
+          const candidate = pendingIceCandidates.shift();
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn('[WebRTC] Error applying buffered ICE candidate:', e);
+          }
+        }
       }
     } catch (err) {
       console.error('[WebRTC Error] handleAnswer:', err.message);
@@ -259,8 +316,12 @@ export const useCallStore = create((set, get) => ({
   // Handle incoming ICE Candidate
   handleIceCandidate: async (candidate) => {
     try {
-      if (peerConnection) {
+      if (!candidate) return;
+      if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        // Queue candidates until remote description is set
+        pendingIceCandidates.push(candidate);
       }
     } catch (err) {
       console.error('[WebRTC Error] handleIceCandidate:', err.message);
@@ -445,6 +506,8 @@ export const useCallStore = create((set, get) => ({
       peerConnection.close();
       peerConnection = null;
     }
+
+    pendingIceCandidates = [];
 
     if (timerInterval) {
       clearInterval(timerInterval);

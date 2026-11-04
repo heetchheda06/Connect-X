@@ -38,6 +38,7 @@ export default function CallModal() {
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
 
   // Attach local video stream
   useEffect(() => {
@@ -46,10 +47,23 @@ export default function CallModal() {
     }
   }, [localStream, isCameraOff, facingMode]);
 
-  // Attach remote video stream
+  // Attach remote video stream (video calls)
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
+  // Attach remote audio stream (crucial for crystal-clear voice and video calls)
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      const playPromise = remoteAudioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[WebRTC Audio Playback AutoPlay]:', err.message);
+        });
+      }
     }
   }, [remoteStream]);
 
@@ -123,6 +137,14 @@ export default function CallModal() {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-deep-900/90 backdrop-blur-lg p-4 sm:p-6 animate-fade-in select-none">
+        {/* Dedicated Remote Audio Player (Essential for voice calls and background audio) */}
+        <audio
+          ref={remoteAudioRef}
+          autoPlay
+          playsInline
+          className="hidden"
+        />
+
         <div className="relative w-full max-w-4xl h-[85vh] max-h-[720px] bg-deep-950 rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col justify-between">
           
           {/* Top Bar: Peer info & Timer */}

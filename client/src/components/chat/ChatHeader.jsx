@@ -53,6 +53,7 @@ export default function ChatHeader({
   const [currentAiMode, setCurrentAiMode] = useState(conversation?.ai?.mode || 'on_demand');
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isTranslateMenuOpen, setIsTranslateMenuOpen] = useState(false);
 
   // Modals
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
@@ -110,6 +111,19 @@ export default function ChatHeader({
     }
 
     await updateAiSettings({ autoTranslateConversations: nextList });
+  };
+
+  const handleTranslateAll = async () => {
+    const lang = aiSettings?.preferredLanguage || 'en';
+    const textMessageIds = messages
+      .filter((m) => m.content && !m.isDeletedForEveryone && m.type !== 'system')
+      .map((m) => m._id);
+    if (textMessageIds.length === 0) {
+      toast('No text messages to translate');
+      return;
+    }
+    toast.success(`Translating conversation messages to ${preferredLangName}... 🌐`);
+    await translateBatch({ messageIds: textMessageIds, targetLang: lang });
   };
 
   const isDirect = conversation.type === 'direct';
@@ -268,6 +282,68 @@ export default function ChatHeader({
               </button>
             </>
           )}
+
+          {/* Translate Conversation Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsTranslateMenuOpen((prev) => !prev)}
+              className={`p-2 rounded-xl transition-colors ${
+                isAutoTranslateOn
+                  ? 'text-brand-600 bg-brand-50 shadow-xs'
+                  : 'text-text-secondary hover:text-brand-600 hover:bg-surface-alt'
+              }`}
+              title={`Translate chat to ${preferredLangName}`}
+            >
+              <Languages className="w-4 h-4" />
+            </button>
+
+            {isTranslateMenuOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-surface rounded-2xl border border-border-main shadow-2xl p-2 z-40 animate-fade-in text-xs space-y-1.5">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-border-main pb-1.5">
+                  <span className="text-[11px] font-bold text-text-primary flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-500 fill-brand-500" />
+                    AI Translation
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                    {preferredLangName}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTranslateMenuOpen(false);
+                    handleTranslateAll();
+                  }}
+                  className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-brand-50 text-text-primary hover:text-brand-700 transition-colors flex items-center gap-2"
+                >
+                  <Languages className="w-3.5 h-3.5 text-brand-500" />
+                  <span>Translate all messages now</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTranslateMenuOpen(false);
+                    handleToggleAutoTranslate();
+                  }}
+                  className={`w-full text-left px-2.5 py-2 rounded-xl transition-colors flex items-center justify-between ${
+                    isAutoTranslateOn
+                      ? 'bg-emerald-50 text-emerald-800 font-semibold'
+                      : 'hover:bg-surface-alt text-text-secondary'
+                  }`}
+                >
+                  <span>Auto-translate incoming messages</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase ${
+                    isAutoTranslateOn ? 'bg-emerald-500 text-white' : 'bg-surface-alt text-text-muted'
+                  }`}>
+                    {isAutoTranslateOn ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* In-Chat Search Button */}
           {onToggleSearch && (
@@ -526,7 +602,12 @@ export default function ChatHeader({
         onClose={() => setIsWallpaperModalOpen(false)}
         conversationId={conversation._id}
         currentWallpaper={conversation.wallpaper}
-        onWallpaperChange={() => {}}
+        onWallpaperChange={(newWallpaper) => {
+          useChatStore.getState().upsertConversation({
+            _id: conversation._id,
+            wallpaper: newWallpaper,
+          });
+        }}
       />
     </>
   );

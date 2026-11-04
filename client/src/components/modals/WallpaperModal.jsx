@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Image as ImageIcon, Check, Upload, Sparkles } from 'lucide-react';
 import { setWallpaperApi } from '../../api/chat.api.js';
 import { uploadFileApi } from '../../api/upload.api.js';
+import { useChatStore } from '../../store/chatStore.js';
 import { toast } from 'react-hot-toast';
 
 const OCEAN_WALLPAPERS = [
@@ -20,6 +21,11 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
   const [customUrl, setCustomUrl] = useState(currentWallpaper?.startsWith('http') ? currentWallpaper : '');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setSelected(currentWallpaper || 'default');
+    setCustomUrl(currentWallpaper?.startsWith('http') ? currentWallpaper : '');
+  }, [currentWallpaper, isOpen]);
 
   if (!isOpen) return null;
 
@@ -59,6 +65,10 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
       const res = await setWallpaperApi(conversationId, finalWallpaper);
       if (res.success) {
         toast.success('Chat wallpaper updated! 🌊');
+        useChatStore.getState().upsertConversation({
+          _id: conversationId,
+          wallpaper: finalWallpaper,
+        });
         if (onWallpaperChange) onWallpaperChange(finalWallpaper);
         onClose();
       }

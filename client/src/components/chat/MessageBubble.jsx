@@ -107,6 +107,10 @@ export default function MessageBubble({
   const canTranslate = !isDeleted && message.content && aiSettings?.enabled;
 
   const handleManualTranslate = () => {
+    if (translation) {
+      toggleShowOriginal(message._id);
+      return;
+    }
     translateMessage({
       messageId: message._id,
       targetLang: preferredLang,
@@ -653,6 +657,31 @@ export default function MessageBubble({
               title="Copy text"
             >
               <Copy className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Translate to Selected Language */}
+          {message.content && !isDeleted && (
+            <button
+              type="button"
+              onClick={handleManualTranslate}
+              disabled={isTranslatingMessage}
+              className={`p-1 rounded-full hover:bg-surface-alt transition-colors ${
+                translation ? 'text-brand-600 bg-brand-50' : 'text-text-muted hover:text-brand-600'
+              }`}
+              title={
+                translation
+                  ? translation.showOriginal
+                    ? `Show translation (${targetLangLabel})`
+                    : 'Show original message'
+                  : `Translate to ${targetLangLabel}`
+              }
+            >
+              {isTranslatingMessage ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
+              ) : (
+                <Languages className="w-3.5 h-3.5" />
+              )}
             </button>
           )}
 
