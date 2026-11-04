@@ -169,3 +169,4 @@ export default function PollModal({ isOpen, onClose, onCreatePoll }) {
     </div>
   );
 }
+

@@ -75,3 +75,4 @@ export default function DeleteChatModal({ isOpen, isGroup, onClose, onConfirm })
     </div>
   );
 }
+

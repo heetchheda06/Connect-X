@@ -52,3 +52,4 @@ export const createReport = async (req, res, next) => {
     next(error);
   }
 };
+

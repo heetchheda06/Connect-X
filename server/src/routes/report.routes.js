@@ -9,3 +9,4 @@ router.use(authenticate);
 router.post('/', createReport);
 
 export default router;
+

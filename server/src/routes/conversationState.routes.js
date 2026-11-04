@@ -37,3 +37,4 @@ router.post('/settings/chats/delete-all', deleteAllChats);
 router.post('/settings/chats/archive-all', archiveAllChats);
 
 export default router;
+

@@ -26,3 +26,4 @@ router.get('/chat-preferences', getChatPreferences);
 router.put('/chat-preferences', updateChatPreferences);
 
 export default router;
+

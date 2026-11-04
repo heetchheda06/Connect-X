@@ -188,3 +188,4 @@ export const updateChatPreferences = async (req, res, next) => {
     next(error);
   }
 };
+

@@ -164,3 +164,4 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
     </div>
   );
 }
+

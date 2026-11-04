@@ -136,3 +136,4 @@ export default {
   getTrendingGifs,
   searchGifs,
 };
+

@@ -15,3 +15,4 @@ router.post('/:userId', blockUser);
 router.delete('/:userId', unblockUser);
 
 export default router;
+

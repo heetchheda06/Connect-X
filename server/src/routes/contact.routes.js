@@ -21,3 +21,4 @@ router.get('/:userId/shared-media', getSharedMedia);
 router.get('/:userId/groups-in-common', getGroupsInCommon);
 
 export default router;
+

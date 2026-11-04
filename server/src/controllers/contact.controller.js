@@ -362,3 +362,4 @@ export const getGroupsInCommon = async (req, res, next) => {
     next(error);
   }
 };
+

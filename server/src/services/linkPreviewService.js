@@ -1,9 +1,35 @@
 import dns from 'dns/promises';
-import ipaddr from 'ipaddr.js';
+import net from 'net';
 
 // Simple in-memory cache with 24-hour TTL
 const previewCache = new Map();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    if (parts[0] === 127) return true; // Loopback
+    if (parts[0] === 10) return true; // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16
+    if (parts[0] === 169 && parts[1] === 254) return true; // Link-local & cloud metadata (169.254.169.254)
+    if (parts[0] === 0) return true; // Current network
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // CGNAT
+    if (parts[0] >= 224) return true; // Multicast / Reserved
+    return false;
+  }
+
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    if (lower === '::1' || lower === '0:0:0:0:0:0:0:1') return true; // Loopback
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // Unique local
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // Link-local
+    if (lower === '::' || lower === '0:0:0:0:0:0:0:0') return true;
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Validates whether a hostname resolves to a public, non-private IP
@@ -29,18 +55,7 @@ async function isSafeUrl(rawUrl) {
     // Resolve DNS to verify IP
     const addresses = await dns.lookup(hostname, { all: true });
     for (const record of addresses) {
-      const addr = ipaddr.parse(record.address);
-      const range = addr.range();
-
-      // Block all non-unicast/private ranges
-      if (
-        range === 'loopback' ||
-        range === 'private' ||
-        range === 'linkLocal' ||
-        range === 'broadcast' ||
-        range === 'carrierGradeNat' ||
-        range === 'reserved'
-      ) {
+      if (isPrivateIp(record.address)) {
         return false;
       }
     }
@@ -146,3 +161,4 @@ export async function getLinkPreview(rawUrl) {
 export default {
   getLinkPreview,
 };
+

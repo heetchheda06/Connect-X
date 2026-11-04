@@ -665,3 +665,4 @@ export const archiveAllChats = async (req, res, next) => {
     next(error);
   }
 };
+
