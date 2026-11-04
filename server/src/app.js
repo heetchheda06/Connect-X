@@ -28,6 +28,7 @@ import reportRoutes from './routes/report.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 import stickerRoutes from './routes/sticker.routes.js';
 import callRoutes from './routes/call.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
 
@@ -144,6 +145,7 @@ export const createApp = () => {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/stickers', stickerRoutes);
   app.use('/api/calls', callRoutes);
+  app.use('/api/admin', adminRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);
