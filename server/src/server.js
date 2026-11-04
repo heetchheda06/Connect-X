@@ -10,6 +10,9 @@ import { socketAuthMiddleware } from './sockets/socket.auth.js';
 import { registerSocketHandlers } from './sockets/socket.handler.js';
 import { initFirebaseAdmin } from './config/firebaseAdmin.js';
 import { reminderScheduler } from './services/reminderScheduler.js';
+import { emailService } from './services/emailService.js';
+import { setupGracefulShutdown } from './utils/shutdown.js';
+import logger from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,14 +50,17 @@ export const io = new SocketIOServer(httpServer, {
 io.use(socketAuthMiddleware);
 registerSocketHandlers(io);
 
-// Start background schedulers
+// Start background schedulers and queue workers
 reminderScheduler.start(io);
+emailService.startQueueWorker();
 
 // Provide io instance to express app for REST-triggered broadcasts
 app.set('io', io);
 
+// Register graceful shutdown handlers
+setupGracefulShutdown(httpServer, io);
+
 const PORT = env.port;
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 [ConnectX Server] Listening on 0.0.0.0:${PORT}`);
-  console.log(`🌿 [Environment] ${env.nodeEnv}`);
+  logger.info({ port: PORT, env: env.nodeEnv }, '🚀 ConnectX Server running');
 });

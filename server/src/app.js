@@ -31,12 +31,19 @@ import callRoutes from './routes/call.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
+import { httpLogger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const createApp = () => {
   const app = express();
+
+  // Structured HTTP Request Logging with sensitive data redaction
+  app.use(httpLogger);
+
+  // Direct Health and Readiness Probes for Cloud / Container orchestrators
+  app.use('/', healthRoutes);
 
   // Security headers
   app.use(

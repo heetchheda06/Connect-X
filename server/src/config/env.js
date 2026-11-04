@@ -57,6 +57,21 @@ export const env = {
   embeddingProvider: process.env.EMBEDDING_PROVIDER || 'gemini',
   embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-004',
   embeddingApiKey: process.env.EMBEDDING_API_KEY || process.env.GEMINI_API_KEY || defaultAiKey,
+  // Email & SMTP Configuration
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: parseInt(process.env.SMTP_PORT, 10) || 587,
+  smtpSecure: process.env.SMTP_SECURE === 'true',
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  emailFrom: process.env.EMAIL_FROM || 'ConnectX <noreply@connectx.local>',
+  supportEmail: process.env.SUPPORT_EMAIL || 'support@connectx.local',
+  appName: process.env.APP_NAME || 'ConnectX',
+  requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === 'true',
+  accountDeletionGraceDays: parseInt(process.env.ACCOUNT_DELETION_GRACE_DAYS, 10) || 14,
+  dataExportTtlDays: parseInt(process.env.DATA_EXPORT_TTL_DAYS, 10) || 7,
+  minAge: parseInt(process.env.MIN_AGE, 10) || 16,
+  logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  // AI Privacy & Retention
   aiRetentionDefaultDays: parseInt(process.env.AI_RETENTION_DEFAULT_DAYS, 10) || 90,
   providerPolicyUrls: (() => {
     try {
