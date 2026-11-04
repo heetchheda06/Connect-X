@@ -1,44 +1,52 @@
 import { StickerPack, Sticker, UserStickerState } from '../models/sticker.model.js';
 
-// Pre-defined official sticker assets (SVG data URIs styled for ConnectX ocean theme)
+// Pre-defined official sticker assets (High-resolution, ultra-fast Cloudflare CDN Twemoji SVGs)
 const OFFICIAL_PACKS_SEED = [
   {
     name: 'ConnectX Ocean Crew',
     author: 'ConnectX Official',
     isOfficial: true,
-    cover: 'https://api.iconify.design/noto:dolphin.svg',
+    cover: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f42c.svg',
     stickers: [
       {
-        url: 'https://api.iconify.design/noto:dolphin.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f42c.svg',
         emojis: ['🐬', 'dolphin', 'happy', 'ocean'],
       },
       {
-        url: 'https://api.iconify.design/noto:whale.svg',
-        emojis: ['🐋', 'whale', 'big', 'sea'],
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f433.svg',
+        emojis: ['🐳', 'whale', 'big', 'sea'],
       },
       {
-        url: 'https://api.iconify.design/noto:seal.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9ad.svg',
         emojis: ['🦭', 'seal', 'cute', 'clap'],
       },
       {
-        url: 'https://api.iconify.design/noto:octopus.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f419.svg',
         emojis: ['🐙', 'octopus', 'tentacles', 'wave'],
       },
       {
-        url: 'https://api.iconify.design/noto:tropical-fish.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f420.svg',
         emojis: ['🐠', 'fish', 'color', 'swim'],
       },
       {
-        url: 'https://api.iconify.design/noto:crab.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f980.svg',
         emojis: ['🦀', 'crab', 'pinch', 'beach'],
       },
       {
-        url: 'https://api.iconify.design/noto:sparkles.svg',
-        emojis: ['✨', 'sparkles', 'magic', 'clean'],
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f988.svg',
+        emojis: ['🦈', 'shark', 'swim', 'ocean'],
       },
       {
-        url: 'https://api.iconify.design/noto:water-wave.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f30a.svg',
         emojis: ['🌊', 'wave', 'cool', 'surf'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f422.svg',
+        emojis: ['🐢', 'turtle', 'chill', 'sea'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2728.svg',
+        emojis: ['✨', 'sparkles', 'magic', 'clean'],
       },
     ],
   },
@@ -46,50 +54,74 @@ const OFFICIAL_PACKS_SEED = [
     name: 'Everyday Moods',
     author: 'ConnectX Official',
     isOfficial: true,
-    cover: 'https://api.iconify.design/noto:party-popper.svg',
+    cover: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f389.svg',
     stickers: [
       {
-        url: 'https://api.iconify.design/noto:party-popper.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f389.svg',
         emojis: ['🎉', 'party', 'celebrate', 'woohoo'],
       },
       {
-        url: 'https://api.iconify.design/noto:fire.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f525.svg',
         emojis: ['🔥', 'fire', 'lit', 'awesome'],
       },
       {
-        url: 'https://api.iconify.design/noto:rocket.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f680.svg',
         emojis: ['🚀', 'rocket', 'launch', 'fast'],
       },
       {
-        url: 'https://api.iconify.design/noto:check-mark-button.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2705.svg',
         emojis: ['✅', 'done', 'yes', 'approved'],
       },
       {
-        url: 'https://api.iconify.design/noto:hundred-points.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f4af.svg',
         emojis: ['💯', '100', 'perfect', 'agree'],
       },
       {
-        url: 'https://api.iconify.design/noto:glowing-star.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f31f.svg',
         emojis: ['🌟', 'star', 'shine', 'best'],
       },
       {
-        url: 'https://api.iconify.design/noto:thumbs-up.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f44d.svg',
         emojis: ['👍', 'thumbsup', 'ok', 'good'],
       },
       {
-        url: 'https://api.iconify.design/noto:clapping-hands.svg',
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f44f.svg',
         emojis: ['👏', 'clap', 'bravo', 'congrats'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f60e.svg',
+        emojis: ['😎', 'cool', 'sunglasses'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f602.svg',
+        emojis: ['😂', 'joy', 'lol', 'laugh'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f92f.svg',
+        emojis: ['🤯', 'mindblown', 'shock'],
+      },
+      {
+        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f63b.svg',
+        emojis: ['😻', 'cat', 'love', 'heart'],
       },
     ],
   },
 ];
 
 /**
- * Ensures official sticker packs exist in the database
+ * Ensures official sticker packs exist in the database with working CDN assets
  */
-async function ensureOfficialPacks() {
-  const count = await StickerPack.countDocuments({ isOfficial: true });
-  if (count === 0) {
+export async function ensureOfficialPacks() {
+  const existing = await StickerPack.find({ isOfficial: true });
+  const hasBrokenUrls = existing.some((p) => (p.cover || '').includes('iconify'));
+
+  if (existing.length === 0 || hasBrokenUrls) {
+    const oldPackIds = existing.map((p) => p._id);
+    if (oldPackIds.length > 0) {
+      await Sticker.deleteMany({ pack: { $in: oldPackIds } });
+      await StickerPack.deleteMany({ _id: { $in: oldPackIds } });
+    }
+
     for (const packData of OFFICIAL_PACKS_SEED) {
       const pack = await StickerPack.create({
         name: packData.name,

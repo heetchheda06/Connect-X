@@ -17,7 +17,7 @@ export const handleResetAndSeedDatabase = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Database cleared and seeded successfully with demo data',
+      message: 'Database cleared completely. Blank slate with official sticker packs ready.',
       data: result,
     });
   } catch (err) {

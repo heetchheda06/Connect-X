@@ -242,7 +242,7 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
             <ConversationItem
               key={conv._id}
               conversation={conv}
-              isActive={activeConversationId === conv._id}
+              isActive={activeConversationId?.toString() === conv._id?.toString()}
               currentUserId={user?._id}
               onSelect={() => setActiveConversation(conv._id)}
               onClearChat={(c) => setClearTargetConv(c)}

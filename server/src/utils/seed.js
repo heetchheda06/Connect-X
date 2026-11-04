@@ -20,17 +20,11 @@ async function seed() {
   const result = await resetAndSeedDatabase();
 
   console.log('\n======================================================');
-  console.log('🎉 [ConnectX] Database Seeding Complete!');
+  console.log('✨ [ConnectX] Database Wipe Complete!');
   console.log('======================================================');
-  console.log('Default Password for all users: Password123!\n');
-  console.log('Demo Accounts:');
-  result.users.forEach((u) => {
-    console.log(`  • ${u.name.padEnd(16)} | Email: ${u.email.padEnd(20)} | Username: @${u.username}`);
-  });
-  console.log('\nSample Channels:');
-  result.rooms.forEach((r) => {
-    console.log(`  • [${r.type}] ${r.name}`);
-  });
+  console.log('Status: All demo users and chat data have been completely removed.');
+  console.log('Database state: 100% clean blank slate (0 users, 0 messages).');
+  console.log('Stickers: Official sticker packs initialized with verified high-res assets.');
   console.log('======================================================\n');
 
   await mongoose.disconnect();

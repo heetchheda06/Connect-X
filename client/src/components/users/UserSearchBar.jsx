@@ -124,9 +124,9 @@ export default function UserSearchBar({ onSelectUser }) {
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200 group-hover:bg-brand-500 group-hover:text-white transition-all flex items-center gap-1 shadow-subtle">
-                    <UserCheck className="w-3.5 h-3.5" />
-                    View
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200 group-hover:bg-brand-500 group-hover:text-white transition-all flex items-center gap-1.5 shadow-subtle">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Chat
                   </span>
                 </div>
               </div>

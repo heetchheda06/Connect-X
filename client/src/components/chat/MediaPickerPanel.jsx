@@ -237,14 +237,23 @@ export default function MediaPickerPanel({
               <button
                 key={pack._id}
                 onClick={() => selectPack(pack._id)}
-                className={`p-1 rounded-xl flex-shrink-0 transition-all ${
+                className={`p-1.5 rounded-xl flex-shrink-0 transition-all flex items-center justify-center ${
                   activePackId === pack._id
-                    ? 'ring-2 ring-brand-500 bg-brand-50'
+                    ? 'ring-2 ring-brand-500 bg-brand-50 shadow-sm'
                     : 'opacity-70 hover:opacity-100 hover:bg-surface-alt'
                 }`}
                 title={pack.name}
               >
-                <img src={pack.cover} alt={pack.name} className="w-6 h-6 object-contain" />
+                <img
+                  src={pack.cover}
+                  alt={pack.name}
+                  className="w-6 h-6 object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'inline';
+                  }}
+                />
+                <span className="hidden text-base leading-none">🌊</span>
               </button>
             ))}
           </div>
@@ -268,10 +277,17 @@ export default function MediaPickerPanel({
                 >
                   <img
                     src={st.url}
-                    alt="sticker"
-                    className="w-14 h-14 object-contain filter drop-shadow-sm"
+                    alt={st.emojis?.[0] || 'sticker'}
+                    className="w-14 h-14 object-contain filter drop-shadow-sm select-none"
                     loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                    }}
                   />
+                  <span className="hidden text-3xl select-none items-center justify-center">
+                    {st.emojis?.[0] || '✨'}
+                  </span>
                 </button>
               ))
             ) : (

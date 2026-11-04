@@ -6,3 +6,4 @@ const router = express.Router();
 router.post('/reset-database', handleResetAndSeedDatabase);
 
 export default router;
+
