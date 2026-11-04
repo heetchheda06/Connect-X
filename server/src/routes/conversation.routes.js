@@ -11,6 +11,12 @@ import {
   discoverRooms,
   joinRoom,
   promoteMemberToAdmin,
+  getOrCreateInviteLink,
+  revokeInviteLink,
+  getGroupInfoByInviteToken,
+  joinGroupByInviteToken,
+  updateGroupPermissions,
+  deleteGroupForEveryone,
 } from '../controllers/conversation.controller.js';
 import {
   getMessages,
@@ -44,6 +50,16 @@ router.post('/:id/leave', leaveConversation);
 router.post('/:id/members', addMembers);
 router.delete('/:id/members/:userId', removeMember);
 router.post('/:id/promote', promoteMemberToAdmin);
+
+// Group invite links & public preview
+router.post('/:id/invite-link', getOrCreateInviteLink);
+router.post('/:id/revoke-invite-link', revokeInviteLink);
+router.get('/join/:token', getGroupInfoByInviteToken);
+router.post('/join/:token', joinGroupByInviteToken);
+
+// Group permissions & deletion
+router.put('/:id/permissions', updateGroupPermissions);
+router.delete('/:id/delete-group', deleteGroupForEveryone);
 
 // Messages sub-routes for this conversation
 router.get('/:id/messages', getMessages);

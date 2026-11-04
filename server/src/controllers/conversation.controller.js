@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
 import User from '../models/user.model.js';
@@ -791,6 +792,301 @@ export const promoteMemberToAdmin = async (req, res, next) => {
       success: true,
       message: 'Member promoted to admin successfully',
       data: { conversation: populated },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Generate or retrieve group invite link token
+ * POST /api/conversations/:id/invite-link
+ */
+export const getOrCreateInviteLink = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    if (conversation.type !== 'group' && conversation.type !== 'room') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invite links can only be created for groups',
+      });
+    }
+
+    const member = conversation.members.find(
+      (m) => m.user.toString() === currentUserId.toString()
+    );
+    if (!member || member.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only group admins can manage invite links',
+      });
+    }
+
+    if (!conversation.inviteToken) {
+      conversation.inviteToken = crypto.randomBytes(16).toString('hex');
+      await conversation.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Invite link retrieved',
+      data: {
+        inviteToken: conversation.inviteToken,
+        inviteUrl: `/join/${conversation.inviteToken}`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Revoke existing group invite link
+ * POST /api/conversations/:id/revoke-invite-link
+ */
+export const revokeInviteLink = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    const member = conversation.members.find(
+      (m) => m.user.toString() === currentUserId.toString()
+    );
+    if (!member || member.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only group admins can revoke invite links',
+      });
+    }
+
+    // Generate fresh new token so previous link is immediately invalidated
+    conversation.inviteToken = crypto.randomBytes(16).toString('hex');
+    await conversation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Previous invite link revoked and new link generated',
+      data: {
+        inviteToken: conversation.inviteToken,
+        inviteUrl: `/join/${conversation.inviteToken}`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get group preview info by invite token
+ * GET /api/conversations/join/:token
+ */
+export const getGroupInfoByInviteToken = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+
+    const conversation = await Conversation.findOne({ inviteToken: token })
+      .select('_id name description avatar members type')
+      .populate('members.user', 'name username avatar')
+      .lean();
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired invite link',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        conversation: {
+          _id: conversation._id,
+          name: conversation.name,
+          description: conversation.description,
+          avatar: conversation.avatar,
+          memberCount: conversation.members.length,
+          members: conversation.members.slice(0, 5),
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Join group using invite token
+ * POST /api/conversations/join/:token
+ */
+export const joinGroupByInviteToken = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findOne({ inviteToken: token });
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired invite link',
+      });
+    }
+
+    const isMember = conversation.members.some(
+      (m) => m.user.toString() === currentUserId.toString()
+    );
+
+    if (isMember) {
+      return res.status(200).json({
+        success: true,
+        message: 'You are already a member of this group',
+        data: { conversationId: conversation._id },
+      });
+    }
+
+    conversation.members.push({
+      user: currentUserId,
+      role: 'member',
+      joinedAt: new Date(),
+    });
+    await conversation.save();
+
+    const populatedUser = await User.findById(currentUserId).select('name username avatar');
+    const systemMsg = await Message.create({
+      conversation: conversation._id,
+      sender: currentUserId,
+      type: 'system',
+      content: `${populatedUser.name || 'A new member'} joined via group invite link`,
+      deliveredTo: [currentUserId],
+      readBy: [{ user: currentUserId, readAt: new Date() }],
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${conversation._id}`).emit('member:joined', {
+        conversationId: conversation._id,
+        user: populatedUser,
+      });
+      io.to(`conversation:${conversation._id}`).emit('message:new', {
+        conversationId: conversation._id,
+        message: systemMsg,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Joined group successfully',
+      data: { conversationId: conversation._id },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update group permissions (only admins can send, only admins can edit info)
+ * PUT /api/conversations/:id/permissions
+ */
+export const updateGroupPermissions = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { onlyAdminsCanSend, onlyAdminsCanEditInfo } = req.body;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    const member = conversation.members.find(
+      (m) => m.user.toString() === currentUserId.toString()
+    );
+    if (!member || member.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only group admins can update group permissions',
+      });
+    }
+
+    if (typeof onlyAdminsCanSend === 'boolean') {
+      conversation.onlyAdminsCanSend = onlyAdminsCanSend;
+    }
+    if (typeof onlyAdminsCanEditInfo === 'boolean') {
+      conversation.onlyAdminsCanEditInfo = onlyAdminsCanEditInfo;
+    }
+
+    await conversation.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${id}`).emit('conversation:permissions-updated', {
+        conversationId: id,
+        onlyAdminsCanSend: conversation.onlyAdminsCanSend,
+        onlyAdminsCanEditInfo: conversation.onlyAdminsCanEditInfo,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Group permissions updated',
+      data: {
+        onlyAdminsCanSend: conversation.onlyAdminsCanSend,
+        onlyAdminsCanEditInfo: conversation.onlyAdminsCanEditInfo,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete group for everyone (creator only)
+ * DELETE /api/conversations/:id/delete-group
+ */
+export const deleteGroupForEveryone = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    if (conversation.createdBy.toString() !== currentUserId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the group creator can delete this group for everyone',
+      });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${id}`).emit('conversation:group-deleted', {
+        conversationId: id,
+        deletedBy: currentUserId,
+      });
+    }
+
+    await Message.deleteMany({ conversation: id });
+    await ConversationUserState.deleteMany({ conversation: id });
+    await Conversation.deleteOne({ _id: id });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Group deleted for everyone',
+      data: { conversationId: id },
     });
   } catch (error) {
     next(error);
