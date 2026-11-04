@@ -18,7 +18,8 @@ import {
 const router = express.Router();
 
 // All chat state routes require authentication
-router.use(authenticate);
+router.use('/conversations', authenticate);
+router.use('/settings', authenticate);
 
 // Per-conversation state actions
 router.post('/conversations/:id/clear', clearChat);

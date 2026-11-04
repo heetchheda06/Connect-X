@@ -125,6 +125,7 @@ export const createApp = () => {
 
   // Mount API routes
   app.use('/api', healthRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/conversations', conversationRoutes);
@@ -145,7 +146,6 @@ export const createApp = () => {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/stickers', stickerRoutes);
   app.use('/api/calls', callRoutes);
-  app.use('/api/admin', adminRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);
