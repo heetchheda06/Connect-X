@@ -70,6 +70,7 @@ export default function ChatPage() {
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
   const [reminderTargetMessage, setReminderTargetMessage] = useState(null);
   const [dismissedCatchUpConvId, setDismissedCatchUpConvId] = useState(null);
+  const [selectedDirectConv, setSelectedDirectConv] = useState(null);
 
   // Initial load
   useEffect(() => {
@@ -228,10 +229,12 @@ export default function ChatPage() {
       const res = await createOrGetDirectConversationApi(targetUser._id);
       if (res.success && res.data?.conversation) {
         const conv = res.data.conversation;
-        await fetchConversations();
+        setSelectedDirectConv(conv);
+        useChatStore.getState().upsertConversation(conv);
         setActiveConversation(conv._id);
         joinConversation(conv._id);
         setActiveTab('chats');
+        fetchConversations();
         toast.success(`Chat opened with ${targetUser.name} 💬`);
       }
     } catch (err) {
@@ -239,7 +242,9 @@ export default function ChatPage() {
     }
   };
 
-  const activeConversation = conversations.find((c) => c._id === activeConversationId);
+  const activeConversation = 
+    conversations.find((c) => c._id?.toString() === activeConversationId?.toString()) ||
+    (selectedDirectConv && selectedDirectConv._id?.toString() === activeConversationId?.toString() ? selectedDirectConv : null);
   const activeMessages = activeConversationId ? messagesByConv[activeConversationId] || [] : [];
 
   // Send message handler (supports text, attachments, replies, stickers, gifs, polls, links)

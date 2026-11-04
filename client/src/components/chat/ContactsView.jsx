@@ -108,6 +108,7 @@ export default function ContactsView({ onClose }) {
     try {
       const res = await createOrGetDirectConversationApi(targetUserId);
       if (res.success && res.data?.conversation?._id) {
+        useChatStore.getState().upsertConversation(res.data.conversation);
         setActiveConversation(res.data.conversation._id);
         if (onClose) onClose();
       }

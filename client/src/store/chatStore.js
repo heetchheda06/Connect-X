@@ -59,6 +59,24 @@ export const useChatStore = create((set, get) => ({
     set({ selectedMessageIds: [], isMultiSelect: false });
   },
 
+  // Upsert conversation into conversations list immediately
+  upsertConversation: (conversation) => {
+    if (!conversation || !conversation._id) return;
+    set((state) => {
+      const existsIndex = state.conversations.findIndex(
+        (c) => c._id?.toString() === conversation._id?.toString()
+      );
+      if (existsIndex !== -1) {
+        const updated = [...state.conversations];
+        updated[existsIndex] = { ...updated[existsIndex], ...conversation };
+        return { conversations: updated };
+      }
+      return {
+        conversations: [conversation, ...state.conversations],
+      };
+    });
+  },
+
   // Fetch all conversations for current user
   fetchConversations: async () => {
     try {
