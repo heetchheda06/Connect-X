@@ -12,6 +12,8 @@ export const useCallStore = create((set, get) => ({
   isMuted: false,
   isCameraOff: false,
   isScreenSharing: false,
+  facingMode: 'user', // 'user' (front) | 'environment' (rear)
+  isSwitchingCamera: false,
   callDuration: 0,
   timerInterval: null,
 
@@ -21,11 +23,19 @@ export const useCallStore = create((set, get) => ({
       const socket = useSocketStore.getState().socket;
       if (!socket) throw new Error('Socket not connected');
 
-      // Request user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: type === 'video',
-      });
+      // Request user media with front camera by default on mobile
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: type === 'video' ? { facingMode: 'user' } : false,
+        });
+      } catch (e) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: type === 'video',
+        });
+      }
 
       set({
         localStream: stream,
@@ -38,6 +48,8 @@ export const useCallStore = create((set, get) => ({
         isMuted: false,
         isCameraOff: false,
         isScreenSharing: false,
+        facingMode: 'user',
+        isSwitchingCamera: false,
         callDuration: 0,
       });
 
@@ -64,10 +76,18 @@ export const useCallStore = create((set, get) => ({
 
     try {
       const socket = useSocketStore.getState().socket;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: incomingCall.type === 'video',
-      });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: incomingCall.type === 'video' ? { facingMode: 'user' } : false,
+        });
+      } catch (e) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: incomingCall.type === 'video',
+        });
+      }
 
       set({
         localStream: stream,
@@ -82,6 +102,8 @@ export const useCallStore = create((set, get) => ({
         isMuted: false,
         isCameraOff: false,
         isScreenSharing: false,
+        facingMode: 'user',
+        isSwitchingCamera: false,
         callDuration: 0,
       });
 
@@ -289,6 +311,86 @@ export const useCallStore = create((set, get) => ({
     }
   },
 
+  // Switch Camera between Front (user) and Rear (environment)
+  switchCamera: async () => {
+    const { localStream, facingMode, isCameraOff, isSwitchingCamera } = get();
+    if (!localStream || isCameraOff || isSwitchingCamera) return;
+
+    set({ isSwitchingCamera: true });
+    const nextFacingMode = facingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+      let newStream = null;
+
+      // 1. Try mobile-standard ideal facingMode constraint
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: nextFacingMode } },
+        });
+      } catch (e1) {
+        // 2. Fallback: inspect connected devices and pick alternate camera
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+          const currentDeviceId = oldVideoTrack?.getSettings?.()?.deviceId;
+          const alternate = videoDevices.find((d) => d.deviceId && d.deviceId !== currentDeviceId);
+          if (alternate) {
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: alternate.deviceId } },
+            });
+          }
+        } catch (e2) {}
+
+        // 3. Fallback: unconstrained video
+        if (!newStream) {
+          newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+      }
+
+      if (!newStream) {
+        throw new Error('Unable to switch camera');
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        throw new Error('No video track available from switched camera');
+      }
+
+      // Stop previous video track
+      if (oldVideoTrack) {
+        oldVideoTrack.stop();
+        localStream.removeTrack(oldVideoTrack);
+      }
+
+      // Attach new video track to existing stream
+      localStream.addTrack(newVideoTrack);
+
+      // Replace track on WebRTC peer connection so remote participant sees switched camera
+      if (peerConnection) {
+        const videoSender = peerConnection.getSenders().find((s) => s.track?.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(newVideoTrack);
+        }
+      }
+
+      // Recreate MediaStream reference to trigger React hook re-renders
+      const updatedStream = new MediaStream([
+        ...localStream.getAudioTracks(),
+        newVideoTrack,
+      ]);
+
+      set({
+        localStream: updatedStream,
+        facingMode: nextFacingMode,
+        isSwitchingCamera: false,
+      });
+    } catch (err) {
+      console.error('[WebRTC Error] switchCamera:', err.message);
+      set({ isSwitchingCamera: false });
+    }
+  },
+
   // Toggle Screen Share
   toggleScreenShare: async () => {
     const { isScreenSharing, localStream, activeCall } = get();
@@ -356,6 +458,8 @@ export const useCallStore = create((set, get) => ({
       isMuted: false,
       isCameraOff: false,
       isScreenSharing: false,
+      facingMode: 'user',
+      isSwitchingCamera: false,
       callDuration: 0,
       timerInterval: null,
     });

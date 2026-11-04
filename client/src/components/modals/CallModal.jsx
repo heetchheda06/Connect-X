@@ -6,6 +6,7 @@ import {
   MicOff, 
   Video, 
   VideoOff, 
+  SwitchCamera,
   Monitor, 
   User, 
   Volume2 
@@ -22,6 +23,8 @@ export default function CallModal() {
     isMuted,
     isCameraOff,
     isScreenSharing,
+    facingMode,
+    isSwitchingCamera,
     callDuration,
     acceptCall,
     rejectCall,
@@ -29,6 +32,7 @@ export default function CallModal() {
     endCall,
     toggleMute,
     toggleCamera,
+    switchCamera,
     toggleScreenShare,
   } = useCallStore();
 
@@ -40,7 +44,7 @@ export default function CallModal() {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
-  }, [localStream, isCameraOff]);
+  }, [localStream, isCameraOff, facingMode]);
 
   // Attach remote video stream
   useEffect(() => {
@@ -178,15 +182,32 @@ export default function CallModal() {
 
             {/* Draggable Local PIP Video */}
             {isVideo && localStream && (
-              <div className="absolute top-4 right-4 w-36 h-48 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-deep-900 z-30">
+              <div className="absolute top-4 right-4 w-32 h-44 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-deep-900 z-30 group">
                 {!isCameraOff ? (
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform -scale-x-100"
-                  />
+                  <>
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover transition-transform duration-300 ${
+                        facingMode === 'user' ? 'transform -scale-x-100' : ''
+                      }`}
+                    />
+                    {/* Quick switch button overlaid on self-view */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        switchCamera();
+                      }}
+                      disabled={isSwitchingCamera}
+                      className="absolute top-2 left-2 p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:bg-black/80 active:scale-90 transition-all shadow-md"
+                      title={facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera'}
+                    >
+                      <SwitchCamera className={`w-4 h-4 ${isSwitchingCamera ? 'animate-spin text-brand-300' : ''}`} />
+                    </button>
+                  </>
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-deep-900 text-white/50 text-xs">
                     <VideoOff className="w-6 h-6 mb-1 text-white/30" />
@@ -198,7 +219,7 @@ export default function CallModal() {
           </div>
 
           {/* Bottom Call Controls Bar */}
-          <div className="relative z-20 flex items-center justify-center gap-4 sm:gap-6 p-6 bg-gradient-to-t from-black/80 via-black/50 to-transparent">
+          <div className="relative z-20 flex items-center justify-center gap-3 sm:gap-6 p-6 bg-gradient-to-t from-black/80 via-black/50 to-transparent">
             {/* Mute Audio */}
             <button
               onClick={toggleMute}
@@ -224,6 +245,19 @@ export default function CallModal() {
                 title={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
               >
                 {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+              </button>
+            )}
+
+            {/* Switch Camera Button (Video calls only, when camera is on) */}
+            {isVideo && !isCameraOff && (
+              <button
+                type="button"
+                onClick={switchCamera}
+                disabled={isSwitchingCamera}
+                className="w-12 h-12 rounded-full flex items-center justify-center bg-white/15 text-white hover:bg-white/25 active:scale-95 transition-all disabled:opacity-50"
+                title={facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera'}
+              >
+                <SwitchCamera className={`w-5 h-5 ${isSwitchingCamera ? 'animate-spin text-brand-300' : ''}`} />
               </button>
             )}
 
