@@ -1,8 +1,12 @@
-import React from 'react';
-import { Search, X, Plus, MessageSquare, Compass, Users } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, X, Plus, MessageSquare, Compass, Users, Archive, ArrowLeft } from 'lucide-react';
 import ConversationItem from './ConversationItem.jsx';
+import ClearChatModal from '../modals/ClearChatModal.jsx';
+import DeleteChatModal from '../modals/DeleteChatModal.jsx';
 import { useChatStore } from '../../store/chatStore.js';
 import { useAuthStore } from '../../store/authStore.js';
+import { clearChatApi, deleteChatApi } from '../../api/chat.api.js';
+import { toast } from 'react-hot-toast';
 
 export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
   const { user } = useAuthStore();
@@ -15,7 +19,13 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
     setFilter,
     searchQuery,
     setSearchQuery,
+    archivedCount,
+    viewArchived,
+    setViewArchived,
   } = useChatStore();
+
+  const [clearTargetConv, setClearTargetConv] = useState(null);
+  const [deleteTargetConv, setDeleteTargetConv] = useState(null);
 
   // Filter conversations
   const filteredConversations = conversations.filter((conv) => {
@@ -44,36 +54,80 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
   const totalGroups = conversations.filter((c) => c.type !== 'direct').length;
 
+  const handleConfirmClear = async (keepStarred) => {
+    if (!clearTargetConv) return;
+    try {
+      await clearChatApi(clearTargetConv._id, keepStarred);
+      toast.success('Chat cleared from your view');
+      setClearTargetConv(null);
+    } catch (err) {
+      toast.error('Failed to clear chat');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetConv) return;
+    try {
+      await deleteChatApi(deleteTargetConv._id);
+      toast.success('Chat deleted from your list');
+      if (activeConversationId === deleteTargetConv._id) {
+        setActiveConversation(null);
+      }
+      setDeleteTargetConv(null);
+    } catch (err) {
+      toast.error('Failed to delete chat');
+    }
+  };
+
   return (
-    <aside className="w-full md:w-[340px] lg:w-[360px] h-[100dvh] bg-surface border-r border-border-main flex flex-col flex-shrink-0 z-10">
+    <aside className="w-full md:w-[340px] lg:w-[360px] h-[100dvh] bg-surface border-r border-border-main flex flex-col flex-shrink-0 z-10 select-none">
       {/* Top Header */}
       <div className="p-4 pb-3 border-b border-border-main/60 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-xl font-heading font-extrabold text-text-primary tracking-tight">
-            Messages
-          </h2>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-surface-alt text-brand-700 border border-border-main">
-            {conversations.length}
-          </span>
+          {viewArchived ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewArchived(false)}
+                className="p-1 rounded-full hover:bg-surface-alt text-text-secondary"
+                title="Back to all chats"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <h2 className="text-xl font-heading font-extrabold text-text-primary tracking-tight">
+                Archived
+              </h2>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-xl font-heading font-extrabold text-text-primary tracking-tight">
+                Messages
+              </h2>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-surface-alt text-brand-700 border border-border-main">
+                {conversations.length}
+              </span>
+            </>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={onOpenCreateGroup}
-            className="p-1.5 rounded-button bg-surface-alt border border-border-main text-text-secondary hover:text-brand-600 hover:bg-brand-50 transition-colors"
-            title="Create Group or Room"
-          >
-            <Users className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onOpenNewChat}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-brand-gradient text-white text-xs font-semibold shadow-brand hover:shadow-brand-lg transition-all active:scale-95"
-            title="Start a new conversation"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New</span>
-          </button>
-        </div>
+        {!viewArchived && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onOpenCreateGroup}
+              className="p-1.5 rounded-button bg-surface-alt border border-border-main text-text-secondary hover:text-brand-600 hover:bg-brand-50 transition-colors"
+              title="Create Group or Room"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onOpenNewChat}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-button bg-brand-gradient text-white text-xs font-semibold shadow-brand hover:shadow-brand-lg transition-all active:scale-95"
+              title="Start a new conversation"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search Input Bar */}
@@ -101,50 +155,70 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
       </div>
 
       {/* Filter Chips: All, Unread, Groups */}
-      <div className="flex items-center gap-1.5 px-4 pb-2.5 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-            filter === 'all'
-              ? 'bg-brand-500 text-white shadow-brand'
-              : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
-          }`}
-        >
-          All
-        </button>
+      {!viewArchived && (
+        <div className="flex items-center gap-1.5 px-4 pb-2.5 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              filter === 'all'
+                ? 'bg-brand-500 text-white shadow-brand'
+                : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
+            }`}
+          >
+            All
+          </button>
 
-        <button
-          onClick={() => setFilter('unread')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-            filter === 'unread'
-              ? 'bg-brand-500 text-white shadow-brand'
-              : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
-          }`}
-        >
-          <span>Unread</span>
-          {totalUnread > 0 && (
-            <span className="w-4 h-4 rounded-full bg-accent-coral text-white text-[10px] font-bold flex items-center justify-center">
-              {totalUnread}
-            </span>
-          )}
-        </button>
+          <button
+            onClick={() => setFilter('unread')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              filter === 'unread'
+                ? 'bg-brand-500 text-white shadow-brand'
+                : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
+            }`}
+          >
+            <span>Unread</span>
+            {totalUnread > 0 && (
+              <span className="w-4 h-4 rounded-full bg-accent-coral text-white text-[10px] font-bold flex items-center justify-center">
+                {totalUnread}
+              </span>
+            )}
+          </button>
 
-        <button
-          onClick={() => setFilter('groups')}
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-            filter === 'groups'
-              ? 'bg-brand-500 text-white shadow-brand'
-              : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
-          }`}
-        >
-          <span>Groups</span>
-          {totalGroups > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-brand-100 text-brand-800 text-[10px]">
-              {totalGroups}
+          <button
+            onClick={() => setFilter('groups')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              filter === 'groups'
+                ? 'bg-brand-500 text-white shadow-brand'
+                : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
+            }`}
+          >
+            <span>Groups</span>
+            {totalGroups > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-brand-100 text-brand-800 text-[10px]">
+                {totalGroups}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Archived Chats Row */}
+      {!viewArchived && archivedCount > 0 && (
+        <div className="px-3 pb-1">
+          <button
+            onClick={() => setViewArchived(true)}
+            className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-surface-alt/70 hover:bg-surface-alt border border-border-main transition-colors text-xs font-semibold text-text-primary"
+          >
+            <div className="flex items-center gap-2.5">
+              <Archive className="w-4 h-4 text-brand-600" />
+              <span>Archived</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-surface text-brand-600 text-[11px] font-bold border border-border-main">
+              {archivedCount}
             </span>
-          )}
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
 
       {/* Conversation List */}
       <div className="flex-1 overflow-y-auto px-2 space-y-1">
@@ -171,21 +245,41 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
               isActive={activeConversationId === conv._id}
               currentUserId={user?._id}
               onSelect={() => setActiveConversation(conv._id)}
+              onClearChat={(c) => setClearTargetConv(c)}
+              onDeleteChat={(c) => setDeleteTargetConv(c)}
             />
           ))
         ) : (
           <div className="flex flex-col items-center justify-center h-48 p-4 text-center text-text-muted">
             <MessageSquare className="w-8 h-8 text-brand-400 mb-2 opacity-60" />
-            <p className="text-xs font-semibold text-text-primary">No conversations</p>
+            <p className="text-xs font-semibold text-text-primary">
+              {viewArchived ? 'No archived chats' : 'No conversations'}
+            </p>
             <p className="text-[11px] text-text-secondary mt-0.5">
               {searchQuery
                 ? `No chats match "${searchQuery}"`
+                : viewArchived
+                ? 'Chats you archive will appear here.'
                 : 'Click "+ New" to find contacts and start chatting!'}
             </p>
           </div>
         )}
       </div>
+
+      {/* Clear Chat Confirmation Modal */}
+      <ClearChatModal
+        isOpen={Boolean(clearTargetConv)}
+        onClose={() => setClearTargetConv(null)}
+        onConfirm={handleConfirmClear}
+      />
+
+      {/* Delete Chat Confirmation Modal */}
+      <DeleteChatModal
+        isOpen={Boolean(deleteTargetConv)}
+        conversation={deleteTargetConv}
+        onClose={() => setDeleteTargetConv(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </aside>
   );
 }
-

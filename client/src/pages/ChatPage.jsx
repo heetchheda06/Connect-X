@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import IconRail from '../components/layout/IconRail.jsx';
 import MobileTabBar from '../components/layout/MobileTabBar.jsx';
 import Sidebar from '../components/sidebar/Sidebar.jsx';
+import ContactsView from '../components/chat/ContactsView.jsx';
+import CallsView from '../components/chat/CallsView.jsx';
+import StarredMessagesView from '../components/chat/StarredMessagesView.jsx';
 import ChatHeader from '../components/chat/ChatHeader.jsx';
 import MessageList from '../components/chat/MessageList.jsx';
 import Composer from '../components/chat/Composer.jsx';
@@ -16,6 +19,8 @@ import DeleteMessageModal from '../components/modals/DeleteMessageModal.jsx';
 import MessageInfoModal from '../components/modals/MessageInfoModal.jsx';
 import AddMembersModal from '../components/modals/AddMembersModal.jsx';
 import ReminderModal from '../components/modals/ReminderModal.jsx';
+import CallModal from '../components/modals/CallModal.jsx';
+import SettingsModal from '../components/modals/SettingsModal.jsx';
 import AiDrawer from '../components/chat/AiDrawer.jsx';
 import ReconnectingBanner from '../components/layout/ReconnectingBanner.jsx';
 import ErrorBoundary from '../components/ui/ErrorBoundary.jsx';
@@ -29,7 +34,7 @@ import { useVoiceStore } from '../store/voiceStore.js';
 import useSocket from '../hooks/useSocket.js';
 import { createOrGetDirectConversationApi, sendMessageApi } from '../api/chat.api.js';
 import { updateReminderApi } from '../api/ai.api.js';
-import { Waves, MessageSquare, Sparkles, Bell } from 'lucide-react';
+import { Waves, Sparkles, Bell } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function ChatPage() {
@@ -48,12 +53,13 @@ export default function ChatPage() {
   } = useChatStore();
   const { emitMessageRead, joinConversation } = useSocketStore();
 
-  const [activeTab, setActiveTab] = useState('chats');
+  const [activeTab, setActiveTab] = useState('chats'); // 'chats' | 'calls' | 'contacts' | 'starred' | 'rooms' | 'settings'
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isDiscoverRoomsOpen, setIsDiscoverRoomsOpen] = useState(false);
   const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [deleteTargetMessage, setDeleteTargetMessage] = useState(null);
   const [infoTargetMessage, setInfoTargetMessage] = useState(null);
@@ -95,7 +101,7 @@ export default function ChatPage() {
     }
   }, [activeConversationId, conversations]);
 
-  // Set up real-time Socket.IO listeners for chat events
+  // Set up real-time Socket.IO listeners
   useEffect(() => {
     if (!socket) return;
 
@@ -105,7 +111,7 @@ export default function ChatPage() {
         emitMessageRead(conversationId);
       }
 
-      // Live Translation: Check if auto-translate is on for this conversation
+      // Live Translation
       const aiSettings = useAiStore.getState().settings;
       if (
         aiSettings?.enabled &&
@@ -123,7 +129,7 @@ export default function ChatPage() {
         }
       }
 
-      // Smart Replies: Trigger suggestions if direct chat and enabled
+      // Smart Replies
       if (
         activeConversationId === conversationId &&
         message?.sender?._id !== user?._id &&
@@ -143,12 +149,10 @@ export default function ChatPage() {
       useTranslationStore.getState().clearTranslation(messageId);
     };
 
-    // AI Voice Note transcript ready
     const onTranscriptReady = ({ messageId, transcript }) => {
       useVoiceStore.getState().setTranscript(messageId, transcript);
     };
 
-    // AI Smart Reminder due
     const onReminderDue = ({ reminder }) => {
       if (!reminder) return;
       toast(
@@ -203,21 +207,11 @@ export default function ChatPage() {
       );
     };
 
-    const onMeetingStarted = ({ meetingTitle }) => {
-      toast(`🎙️ Meeting Mode is active: "${meetingTitle || 'Live Meeting'}"`, { icon: '📝' });
-    };
-
-    const onMeetingEnded = () => {
-      toast('Meeting ended! Minutes and action items generated ✨', { icon: '✨' });
-    };
-
     socket.on('message:new', onNewMessage);
     socket.on('message:read', onRead);
     socket.on('message:deleted', onDeleted);
     socket.on('transcript:ready', onTranscriptReady);
     socket.on('reminder:due', onReminderDue);
-    socket.on('meeting:started', onMeetingStarted);
-    socket.on('meeting:ended', onMeetingEnded);
 
     return () => {
       socket.off('message:new', onNewMessage);
@@ -225,31 +219,8 @@ export default function ChatPage() {
       socket.off('message:deleted', onDeleted);
       socket.off('transcript:ready', onTranscriptReady);
       socket.off('reminder:due', onReminderDue);
-      socket.off('meeting:started', onMeetingStarted);
-      socket.off('meeting:ended', onMeetingEnded);
     };
   }, [socket, activeConversationId, user?._id, handleIncomingMessage, handleMessageRead, handleMessageDeleted, emitMessageRead]);
-
-  // When active conversation opens, auto-translate visible text messages if auto-translate is on
-  useEffect(() => {
-    if (!activeConversationId) return;
-    const aiSettings = useAiStore.getState().settings;
-    if (!aiSettings?.enabled) return;
-
-    const autoTranslateList = (aiSettings.autoTranslateConversations || []).map((id) => (id?._id || id)?.toString());
-    if (autoTranslateList.includes(activeConversationId.toString())) {
-      const convMessages = messagesByConv[activeConversationId] || [];
-      const textIds = convMessages
-        .filter((m) => m.content && !m.isDeletedForEveryone && m.type !== 'system')
-        .map((m) => m._id);
-      if (textIds.length > 0) {
-        useTranslationStore.getState().translateBatch({
-          messageIds: textIds,
-          targetLang: aiSettings.preferredLanguage || 'en',
-        });
-      }
-    }
-  }, [activeConversationId, messagesByConv]);
 
   // Handle starting a conversation from search modal
   const handleSelectUserToChat = async (targetUser) => {
@@ -260,6 +231,7 @@ export default function ChatPage() {
         await fetchConversations();
         setActiveConversation(conv._id);
         joinConversation(conv._id);
+        setActiveTab('chats');
         toast.success(`Chat opened with ${targetUser.name} 💬`);
       }
     } catch (err) {
@@ -267,15 +239,14 @@ export default function ChatPage() {
     }
   };
 
-  // Find active conversation object
   const activeConversation = conversations.find((c) => c._id === activeConversationId);
   const activeMessages = activeConversationId ? messagesByConv[activeConversationId] || [] : [];
 
-  // Send message handler (supports text, attachments, replies)
+  // Send message handler (supports text, attachments, replies, stickers, gifs, polls, links)
   const handleSendMessage = async (messagePayload) => {
     if (!activeConversationId) return;
 
-    const { content, attachment, replyTo, type, aiCard } = messagePayload;
+    const { content, attachment, replyTo, type, aiCard, poll, linkPreview } = messagePayload;
 
     if (socket && socket.connected) {
       socket.emit('message:send', {
@@ -285,9 +256,10 @@ export default function ChatPage() {
         replyTo,
         type,
         aiCard,
+        poll,
+        linkPreview,
       });
     } else {
-      // Fallback to REST API
       try {
         await sendMessageApi(activeConversationId, {
           content,
@@ -295,6 +267,8 @@ export default function ChatPage() {
           replyTo,
           type,
           aiCard,
+          poll,
+          linkPreview,
         });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to send message');
@@ -303,8 +277,11 @@ export default function ChatPage() {
   };
 
   const handleTabSelect = (tab) => {
+    if (tab === 'settings') {
+      setIsSettingsOpen(true);
+      return;
+    }
     setActiveTab(tab);
-    if (tab === 'contacts') setIsNewChatOpen(true);
     if (tab === 'rooms') setIsDiscoverRoomsOpen(true);
   };
 
@@ -319,22 +296,36 @@ export default function ChatPage() {
         onOpenProfile={() => setIsEditProfileOpen(true)}
       />
 
-      {/* Column 2: Sidebar Conversation List (Visible when no active chat on mobile) */}
+      {/* Column 2: Secondary Panel (Chats Sidebar, Contacts, Calls, Starred) */}
       <div
-        className={`w-full md:w-auto h-full ${
+        className={`w-full md:w-[340px] lg:w-[360px] h-full ${
           activeConversationId ? 'hidden md:flex' : 'flex'
         }`}
       >
-        <Sidebar
-          onOpenNewChat={() => setIsNewChatOpen(true)}
-          onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-        />
+        {activeTab === 'chats' && (
+          <Sidebar
+            onOpenNewChat={() => setIsNewChatOpen(true)}
+            onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
+          />
+        )}
+
+        {activeTab === 'contacts' && (
+          <ContactsView onClose={() => setActiveTab('chats')} />
+        )}
+
+        {activeTab === 'calls' && (
+          <CallsView onClose={() => setActiveTab('chats')} />
+        )}
+
+        {activeTab === 'starred' && (
+          <StarredMessagesView onClose={() => setActiveTab('chats')} />
+        )}
       </div>
 
       {/* Column 3: Active Chat Area (Visible when active chat on mobile, or full flex on desktop) */}
       <main
         className={`flex-1 h-[100dvh] flex flex-col bg-surface overflow-hidden ${
-          !activeConversationId ? 'hidden md:flex' : 'flex'
+          !activeConversationId && activeTab === 'chats' ? 'hidden md:flex' : activeTab !== 'chats' ? 'hidden md:flex' : 'flex'
         }`}
       >
         {activeConversation ? (
@@ -437,6 +428,15 @@ export default function ChatPage() {
         />
       )}
 
+      {/* Global 1:1 WebRTC Voice & Video Call Modal */}
+      <CallModal />
+
+      {/* Settings Modal (Privacy, Notifications, Chats & Blocked) */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
       {/* Modals & Lightbox */}
       <Lightbox
         image={lightboxImage}
@@ -466,6 +466,7 @@ export default function ChatPage() {
           fetchConversations();
           setActiveConversation(conv._id);
           joinConversation(conv._id);
+          setActiveTab('chats');
         }}
       />
 
@@ -476,6 +477,7 @@ export default function ChatPage() {
           fetchConversations();
           setActiveConversation(conv._id);
           joinConversation(conv._id);
+          setActiveTab('chats');
         }}
         onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
       />

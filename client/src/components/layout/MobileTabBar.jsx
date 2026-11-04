@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Compass, Users, User } from 'lucide-react';
+import { MessageSquare, Phone, Users, User, Settings } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore.js';
 
 export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) {
@@ -8,7 +8,7 @@ export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border-main flex items-center justify-around z-30 px-2 pb-[env(safe-area-inset-bottom)] shadow-lg">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border-main flex items-center justify-around z-30 px-2 pb-[env(safe-area-inset-bottom)] shadow-lg select-none">
       <button
         onClick={() => onSelectTab('chats')}
         className={`relative flex flex-col items-center justify-center w-14 h-full transition-colors ${
@@ -25,13 +25,13 @@ export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) 
       </button>
 
       <button
-        onClick={() => onSelectTab('rooms')}
+        onClick={() => onSelectTab('calls')}
         className={`flex flex-col items-center justify-center w-14 h-full transition-colors ${
-          activeTab === 'rooms' ? 'text-brand-600' : 'text-text-muted hover:text-text-secondary'
+          activeTab === 'calls' ? 'text-brand-600' : 'text-text-muted hover:text-text-secondary'
         }`}
       >
-        <Compass className="w-5 h-5" />
-        <span className="text-[10px] font-semibold mt-1">Rooms</span>
+        <Phone className="w-5 h-5" />
+        <span className="text-[10px] font-semibold mt-1">Calls</span>
       </button>
 
       <button
@@ -45,6 +45,16 @@ export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) 
       </button>
 
       <button
+        onClick={() => onSelectTab('settings')}
+        className={`flex flex-col items-center justify-center w-14 h-full transition-colors ${
+          activeTab === 'settings' ? 'text-brand-600' : 'text-text-muted hover:text-text-secondary'
+        }`}
+      >
+        <Settings className="w-5 h-5" />
+        <span className="text-[10px] font-semibold mt-1">Settings</span>
+      </button>
+
+      <button
         onClick={onOpenProfile}
         className="flex flex-col items-center justify-center w-14 h-full text-text-muted hover:text-text-secondary transition-colors"
       >
@@ -54,4 +64,3 @@ export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) 
     </nav>
   );
 }
-

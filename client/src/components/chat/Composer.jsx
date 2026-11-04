@@ -6,22 +6,26 @@ import {
   X, 
   FileText, 
   Loader2,
-  Sparkles,
-  Check,
-  RotateCw,
-  Wand2,
-  ArrowRight,
-  Mic,
-  Square,
-  Trash2
+  Sparkles, 
+  Check, 
+  RotateCw, 
+  Mic, 
+  Trash2,
+  BarChart2,
+  Video,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
 import { useAiStore } from '../../store/aiStore.js';
 import { useSmartReplyStore } from '../../store/smartReplyStore.js';
 import { uploadFileApi } from '../../api/upload.api.js';
+import { getLinkPreviewApi } from '../../api/chat.api.js';
 import { formatFileSize } from '../../utils/file.js';
-import EmojiPickerPopover from './EmojiPickerPopover.jsx';
+import MediaPickerPanel from './MediaPickerPanel.jsx';
+import PollModal from '../modals/PollModal.jsx';
+import Avatar from '../ui/Avatar.jsx';
 import { toast } from 'react-hot-toast';
 
 const TONE_OPTIONS = [
@@ -34,12 +38,11 @@ const TONE_OPTIONS = [
 ];
 
 export default function Composer({ onSendMessage, disabled }) {
-  const { activeConversationId, replyingTo, setReplyingTo } = useChatStore();
+  const { activeConversationId, replyingTo, setReplyingTo, conversations } = useChatStore();
   const { emitTypingStart, emitTypingStop } = useSocketStore();
   const { settings: aiSettings } = useAiStore();
   const {
     suggestions,
-    isLoadingSuggestions,
     clearSuggestions,
     tonePreview,
     isRewriting,
@@ -47,13 +50,26 @@ export default function Composer({ onSendMessage, disabled }) {
     clearTonePreview,
   } = useSmartReplyStore();
 
+  const currentConv = conversations.find((c) => c._id === activeConversationId);
+
   const [text, setText] = useState('');
-  const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
+  const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [isToneMenuOpen, setIsToneMenuOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Link preview state
+  const [linkPreview, setLinkPreview] = useState(null);
+  const [dismissedLinkUrl, setDismissedLinkUrl] = useState(null);
+  const [loadingLinkPreview, setLoadingLinkPreview] = useState(false);
+  const linkDebounceRef = useRef(null);
+
+  // Mentions (@) state
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionIndex, setMentionIndex] = useState(-1);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -90,7 +106,6 @@ export default function Composer({ onSendMessage, disabled }) {
   useEffect(() => {
     const handlePreviewKeyDown = (e) => {
       if (!tonePreview) return;
-
       if (e.key === 'Escape') {
         e.preventDefault();
         clearTonePreview();
@@ -99,25 +114,55 @@ export default function Composer({ onSendMessage, disabled }) {
         handleApplyTone();
       }
     };
-
     window.addEventListener('keydown', handlePreviewKeyDown);
     return () => window.removeEventListener('keydown', handlePreviewKeyDown);
   }, [tonePreview]);
 
-  // Handle file selection (from input, drag-and-drop, or clipboard paste)
+  // Debounced Link Preview detection
+  useEffect(() => {
+    if (linkDebounceRef.current) clearTimeout(linkDebounceRef.current);
+
+    const urlMatch = text.match(/https?:\/\/[^\s]+/i);
+    if (!urlMatch) {
+      setLinkPreview(null);
+      return;
+    }
+
+    const detectedUrl = urlMatch[0];
+    if (detectedUrl === dismissedLinkUrl) return;
+
+    linkDebounceRef.current = setTimeout(async () => {
+      try {
+        setLoadingLinkPreview(true);
+        const res = await getLinkPreviewApi(detectedUrl);
+        if (res.success && res.data?.preview) {
+          setLinkPreview(res.data.preview);
+        }
+      } catch {
+        // Silent link preview fallback
+      } finally {
+        setLoadingLinkPreview(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(linkDebounceRef.current);
+  }, [text, dismissedLinkUrl]);
+
+  // Handle file selection (image, video, document)
   const processSelectedFile = (file) => {
     if (!file) return;
 
-    // Check size limit: 10MB
-    const MAX_SIZE = 10 * 1024 * 1024;
+    const isVideo = file.type.startsWith('video/');
+    const MAX_SIZE = isVideo ? 25 * 1024 * 1024 : 10 * 1024 * 1024;
+
     if (file.size > MAX_SIZE) {
-      toast.error('File size exceeds the 10MB limit');
+      toast.error(`File size exceeds the ${isVideo ? '25MB' : '10MB'} limit`);
       return;
     }
 
     setSelectedFile(file);
 
-    if (file.type.startsWith('image/')) {
+    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
       const objUrl = URL.createObjectURL(file);
       setFilePreviewUrl(objUrl);
     } else {
@@ -152,11 +197,11 @@ export default function Composer({ onSendMessage, disabled }) {
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
+      if (items[i].type.indexOf('image') !== -1 || items[i].type.indexOf('video') !== -1) {
         const file = items[i].getAsFile();
         if (file) {
           processSelectedFile(file);
-          toast.success('Pasted image ready to send! 📷');
+          toast.success('Pasted media ready to send! 📷');
           break;
         }
       }
@@ -177,9 +222,23 @@ export default function Composer({ onSendMessage, disabled }) {
     const val = e.target.value;
     setText(val);
 
-    // Rule: Hide smart reply suggestions as soon as user starts typing
-    if (suggestions.length > 0) {
-      clearSuggestions();
+    // Hide suggestions once user types
+    if (suggestions.length > 0) clearSuggestions();
+
+    // Mentions (@) detection for group chats
+    if (currentConv?.type === 'group') {
+      const lastAt = val.lastIndexOf('@');
+      if (lastAt !== -1 && (lastAt === 0 || val[lastAt - 1] === ' ')) {
+        const query = val.slice(lastAt + 1);
+        if (!query.includes(' ')) {
+          setMentionQuery(query.toLowerCase());
+          setMentionIndex(lastAt);
+        } else {
+          setMentionQuery(null);
+        }
+      } else {
+        setMentionQuery(null);
+      }
     }
 
     if (!activeConversationId) return;
@@ -195,10 +254,60 @@ export default function Composer({ onSendMessage, disabled }) {
     }
   };
 
+  const handleSelectMention = (member) => {
+    if (mentionIndex === -1) return;
+    const name = member.user?.username || member.user?.name || '';
+    const before = text.slice(0, mentionIndex);
+    const after = text.slice(mentionIndex + (mentionQuery?.length || 0) + 1);
+    setText(`${before}@${name} ${after}`);
+    setMentionQuery(null);
+    inputRef.current?.focus();
+  };
+
+  // Media Picker handlers
   const handleEmojiSelect = (emoji) => {
     setText((prev) => prev + emoji);
     if (suggestions.length > 0) clearSuggestions();
     inputRef.current?.focus();
+  };
+
+  const handleSelectGif = (gif) => {
+    setIsMediaPickerOpen(false);
+    onSendMessage({
+      content: '',
+      type: 'gif',
+      attachment: {
+        url: gif.url,
+        width: gif.width,
+        height: gif.height,
+        provider: 'giphy',
+        providerId: gif.id,
+        name: gif.title || 'GIF',
+      },
+    });
+  };
+
+  const handleSelectSticker = (sticker) => {
+    setIsMediaPickerOpen(false);
+    onSendMessage({
+      content: '',
+      type: 'sticker',
+      attachment: {
+        url: sticker.url,
+        width: sticker.width,
+        height: sticker.height,
+        name: 'Sticker',
+      },
+    });
+  };
+
+  // Poll creation handler
+  const handleCreatePoll = (pollData) => {
+    onSendMessage({
+      content: pollData.question,
+      type: 'poll',
+      poll: pollData,
+    });
   };
 
   const handleKeyDown = (e) => {
@@ -208,14 +317,12 @@ export default function Composer({ onSendMessage, disabled }) {
     }
   };
 
-  // Apply a smart reply suggestion to the draft input
   const handleApplySuggestion = (suggestionText) => {
     setText(suggestionText);
     clearSuggestions();
     inputRef.current?.focus();
   };
 
-  // Toggle or open tone menu
   const handleToggleToneMenu = () => {
     if (!aiSettings?.enabled) {
       toast('Enable AI Features in Settings to use Tone Assist ✨', { icon: '✨' });
@@ -228,13 +335,11 @@ export default function Composer({ onSendMessage, disabled }) {
     setIsToneMenuOpen((prev) => !prev);
   };
 
-  // Request tone assist rewrite
   const handleSelectTone = async (toneId) => {
     setIsToneMenuOpen(false);
     await rewriteDraft({ text: text.trim(), tone: toneId });
   };
 
-  // Accept rewritten tone
   const handleApplyTone = () => {
     if (tonePreview?.rewritten) {
       setText(tonePreview.rewritten);
@@ -244,7 +349,6 @@ export default function Composer({ onSendMessage, disabled }) {
     }
   };
 
-  // Retry tone assist with higher temperature
   const handleRetryTone = async () => {
     if (tonePreview) {
       await rewriteDraft({
@@ -255,7 +359,7 @@ export default function Composer({ onSendMessage, disabled }) {
     }
   };
 
-  // Clean up audio tracks on unmount
+  // Voice recording
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
@@ -303,7 +407,6 @@ export default function Composer({ onSendMessage, disabled }) {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      console.error('Mic access error:', err);
       toast.error('Microphone access is required to record voice notes');
     }
   };
@@ -357,12 +460,9 @@ export default function Composer({ onSendMessage, disabled }) {
             type: 'voice',
           });
           toast.success('Voice note sent! 🎙️');
-        } else {
-          throw new Error(uploadRes.message || 'Audio upload failed');
         }
       } catch (err) {
-        console.error('Voice send error:', err);
-        toast.error(err.response?.data?.message || err.message || 'Failed to send voice note');
+        toast.error('Failed to send voice note');
       } finally {
         setIsProcessingAudio(false);
         setIsRecording(false);
@@ -389,8 +489,8 @@ export default function Composer({ onSendMessage, disabled }) {
 
     try {
       let attachmentMetadata = null;
+      let msgType = 'text';
 
-      // 1. Upload file if attached
       if (selectedFile) {
         setUploadProgress(10);
         const formData = new FormData();
@@ -402,27 +502,31 @@ export default function Composer({ onSendMessage, disabled }) {
 
         if (uploadRes.success && uploadRes.data) {
           attachmentMetadata = uploadRes.data;
+          if (selectedFile.type.startsWith('video/')) {
+            msgType = 'video';
+          }
         } else {
           throw new Error(uploadRes.message || 'File upload failed');
         }
       }
 
-      // 2. Dispatch message
       onSendMessage({
         content: trimmedText,
         attachment: attachmentMetadata,
         replyTo: replyingTo?._id || null,
+        type: msgType,
+        linkPreview: linkPreview || undefined,
       });
 
-      // 3. Reset form & AI state
       setText('');
       handleRemoveFile();
       setReplyingTo(null);
-      setIsEmojiOpen(false);
+      setLinkPreview(null);
+      setMentionQuery(null);
+      setIsMediaPickerOpen(false);
       clearSuggestions();
       clearTonePreview();
     } catch (err) {
-      console.error('Send error:', err);
       toast.error(err.response?.data?.message || err.message || 'Failed to send message');
     } finally {
       setUploadProgress(null);
@@ -431,6 +535,18 @@ export default function Composer({ onSendMessage, disabled }) {
 
   const isUploading = uploadProgress !== null;
   const showSmartReplies = suggestions && suggestions.length > 0 && !text.trim() && !selectedFile;
+
+  // Filter mention candidates
+  const mentionCandidates = currentConv?.type === 'group' && mentionQuery !== null
+    ? (currentConv.members || [])
+        .filter((m) => {
+          const u = m.user || {};
+          const nameMatch = (u.name || '').toLowerCase().includes(mentionQuery);
+          const userMatch = (u.username || '').toLowerCase().includes(mentionQuery);
+          return nameMatch || userMatch;
+        })
+        .slice(0, 5)
+    : [];
 
   return (
     <div
@@ -443,21 +559,92 @@ export default function Composer({ onSendMessage, disabled }) {
           : 'border-border-main'
       }`}
     >
-      {/* Hidden file input */}
+      {/* Hidden file input supporting images, videos, and documents */}
       <input
         ref={fileInputRef}
         type="file"
         onChange={handleFileInputChange}
         className="hidden"
-        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+        accept="image/*,video/mp4,video/webm,video/quicktime,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
       />
 
-      {/* Lazy-loaded Emoji Picker */}
-      <EmojiPickerPopover
-        isOpen={isEmojiOpen}
-        onClose={() => setIsEmojiOpen(false)}
-        onEmojiClick={handleEmojiSelect}
+      {/* Unified Media Picker Panel (Emoji, GIF, Sticker) */}
+      <MediaPickerPanel
+        isOpen={isMediaPickerOpen}
+        onClose={() => setIsMediaPickerOpen(false)}
+        onSelectEmoji={handleEmojiSelect}
+        onSelectGif={handleSelectGif}
+        onSelectSticker={handleSelectSticker}
       />
+
+      {/* Poll Creation Modal */}
+      <PollModal
+        isOpen={isPollModalOpen}
+        onClose={() => setIsPollModalOpen(false)}
+        onCreatePoll={handleCreatePoll}
+      />
+
+      {/* Mentions Autocomplete Dropdown */}
+      {mentionCandidates.length > 0 && (
+        <div className="absolute bottom-16 left-12 w-64 bg-surface rounded-2xl border border-brand-200 shadow-2xl p-1.5 z-30 animate-fade-in text-xs space-y-1">
+          <div className="px-2 py-1 text-[10px] font-bold text-text-muted uppercase">
+            Mention Member
+          </div>
+          {mentionCandidates.map((m) => {
+            const u = m.user || {};
+            return (
+              <div
+                key={u._id}
+                onClick={() => handleSelectMention(m)}
+                className="flex items-center gap-2 p-2 rounded-xl hover:bg-brand-50 cursor-pointer transition-colors"
+              >
+                <Avatar src={u.avatar} name={u.name} id={u._id} size="xs" />
+                <div className="truncate">
+                  <p className="font-semibold text-text-primary truncate">{u.name}</p>
+                  <span className="text-[10px] text-text-muted">@{u.username}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Link Preview Card */}
+      {linkPreview && (
+        <div className="flex items-start gap-3 p-2.5 rounded-2xl bg-surface-alt border border-brand-200 animate-fade-in relative text-xs">
+          {linkPreview.image && (
+            <img
+              src={linkPreview.image}
+              alt="Preview"
+              className="w-16 h-16 object-cover rounded-xl border border-border-main flex-shrink-0"
+            />
+          )}
+          <div className="flex-1 min-w-0 pr-6">
+            <span className="text-[10px] font-bold text-brand-600 uppercase flex items-center gap-1">
+              <Globe className="w-3 h-3" />
+              {linkPreview.siteName || 'Web Link'}
+            </span>
+            <p className="font-bold text-text-primary truncate mt-0.5">
+              {linkPreview.title || linkPreview.url}
+            </p>
+            {linkPreview.description && (
+              <p className="text-[11px] text-text-secondary line-clamp-1 mt-0.5">
+                {linkPreview.description}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDismissedLinkUrl(linkPreview.url);
+              setLinkPreview(null);
+            }}
+            className="p-1 rounded-full text-text-muted hover:text-text-primary hover:bg-surface"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Smart Replies Chips Bar */}
       {showSmartReplies && (
@@ -576,15 +763,22 @@ export default function Composer({ onSendMessage, disabled }) {
         </div>
       )}
 
-      {/* Attachment Preview Card */}
+      {/* Attachment / Video Preview Card */}
       {selectedFile && (
         <div className="flex items-center gap-3 p-2.5 rounded-xl bg-surface-alt border border-border-main animate-fade-in relative overflow-hidden">
           {filePreviewUrl ? (
-            <img
-              src={filePreviewUrl}
-              alt="Attachment"
-              className="w-12 h-12 object-cover rounded-lg border border-border-main shadow-subtle flex-shrink-0"
-            />
+            selectedFile.type.startsWith('video/') ? (
+              <video
+                src={filePreviewUrl}
+                className="w-14 h-14 object-cover rounded-lg border border-border-main shadow-subtle flex-shrink-0"
+              />
+            ) : (
+              <img
+                src={filePreviewUrl}
+                alt="Attachment"
+                className="w-12 h-12 object-cover rounded-lg border border-border-main shadow-subtle flex-shrink-0"
+              />
+            )
           ) : (
             <div className="w-12 h-12 rounded-lg bg-surface border border-border-main flex items-center justify-center text-brand-600 shadow-subtle flex-shrink-0">
               <FileText className="w-6 h-6" />
@@ -596,7 +790,7 @@ export default function Composer({ onSendMessage, disabled }) {
               {selectedFile.name}
             </p>
             <span className="text-[10px] text-text-muted">
-              {formatFileSize(selectedFile.size)}
+              {formatFileSize(selectedFile.size)} {selectedFile.type.startsWith('video/') ? '· Video' : ''}
             </span>
 
             {/* Live Upload Progress Bar */}
@@ -625,30 +819,40 @@ export default function Composer({ onSendMessage, disabled }) {
 
       {/* Main Composer Row */}
       <form onSubmit={handleSubmit} className="flex items-center gap-2 relative">
-        {/* Attachment & Emoji Trigger Buttons */}
+        {/* Attachment & Emoji & Poll Buttons */}
         <div className="flex items-center gap-0.5 text-text-muted">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading || disabled}
             className="p-2 rounded-full hover:bg-surface-alt hover:text-brand-600 transition-colors disabled:opacity-50"
-            title="Attach Image or Document (max 10MB)"
+            title="Attach Media or Document"
           >
             <Paperclip className="w-4 h-4" />
           </button>
 
           <button
             type="button"
-            onClick={() => setIsEmojiOpen(!isEmojiOpen)}
+            onClick={() => setIsMediaPickerOpen(!isMediaPickerOpen)}
             disabled={disabled}
             className={`p-2 rounded-full transition-colors ${
-              isEmojiOpen
+              isMediaPickerOpen
                 ? 'bg-brand-50 text-brand-600'
                 : 'hover:bg-surface-alt hover:text-brand-600'
             }`}
-            title="Choose Emoji"
+            title="Emoji / GIF / Stickers"
           >
             <Smile className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPollModalOpen(true)}
+            disabled={disabled}
+            className="p-2 rounded-full hover:bg-surface-alt hover:text-brand-600 transition-colors"
+            title="Create Poll 📊"
+          >
+            <BarChart2 className="w-4 h-4" />
           </button>
 
           {/* Tone Assist Trigger Button */}
@@ -664,7 +868,7 @@ export default function Composer({ onSendMessage, disabled }) {
                   ? 'text-brand-600 hover:bg-brand-50 hover:text-brand-700'
                   : 'hover:bg-surface-alt text-text-muted opacity-80'
               }`}
-              title="Tone Assist ✨ (Rewrite in polite, shorter, professional & more)"
+              title="Tone Assist ✨"
             >
               {isRewriting ? (
                 <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
@@ -774,7 +978,7 @@ export default function Composer({ onSendMessage, disabled }) {
               placeholder={
                 selectedFile
                   ? 'Add an optional caption...'
-                  : 'Type a message (or paste an image)...'
+                  : 'Type a message, @mention, or paste link...'
               }
               className="w-full px-4 py-2.5 text-xs sm:text-sm bg-surface-alt border border-border-main rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all shadow-subtle"
             />

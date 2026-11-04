@@ -3,7 +3,14 @@ import {
   getConversationsApi, 
   getMessagesApi, 
   markMessagesAsReadApi,
-  deleteMessageApi 
+  deleteMessageApi,
+  clearChatApi,
+  deleteChatApi,
+  archiveChatApi,
+  pinChatApi,
+  muteChatApi,
+  markUnreadApi,
+  setWallpaperApi
 } from '../api/chat.api.js';
 
 export const useChatStore = create((set, get) => ({
@@ -19,14 +26,51 @@ export const useChatStore = create((set, get) => ({
   searchQuery: '',
   infoDrawerOpen: false,
   replyingTo: null,
+  archivedCount: 0,
+  viewArchived: false,
+
+  // Multi-select message mode
+  selectedMessageIds: [],
+  isMultiSelect: false,
+
+  setViewArchived: (val) => {
+    set({ viewArchived: val });
+    get().fetchConversations();
+  },
+
+  // Toggle multi-select mode
+  setIsMultiSelect: (val) => {
+    set({ isMultiSelect: val, selectedMessageIds: val ? get().selectedMessageIds : [] });
+  },
+
+  toggleSelectMessage: (messageId) => {
+    const { selectedMessageIds } = get();
+    const exists = selectedMessageIds.includes(messageId);
+    const updated = exists
+      ? selectedMessageIds.filter((id) => id !== messageId)
+      : [...selectedMessageIds, messageId];
+    set({
+      selectedMessageIds: updated,
+      isMultiSelect: updated.length > 0,
+    });
+  },
+
+  clearSelection: () => {
+    set({ selectedMessageIds: [], isMultiSelect: false });
+  },
 
   // Fetch all conversations for current user
   fetchConversations: async () => {
     try {
       set({ loadingConversations: true });
-      const res = await getConversationsApi();
-      if (res.success && res.data?.conversations) {
-        set({ conversations: res.data.conversations, loadingConversations: false });
+      const { viewArchived } = get();
+      const res = await getConversationsApi({ archived: viewArchived });
+      if (res.success && res.data) {
+        set({
+          conversations: res.data.conversations || [],
+          archivedCount: res.data.archivedCount || 0,
+          loadingConversations: false,
+        });
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -147,9 +191,17 @@ export const useChatStore = create((set, get) => ({
         conv.unreadCount = (conv.unreadCount || 0) + 1;
       }
 
-      // Move conversation to top
-      updatedConversations.splice(existingIndex, 1);
-      updatedConversations.unshift(conv);
+      // Move conversation to top (unless pinned)
+      if (!conv.isPinned) {
+        updatedConversations.splice(existingIndex, 1);
+        // Find insert position after all pinned chats
+        const firstUnpinnedIndex = updatedConversations.findIndex((c) => !c.isPinned);
+        if (firstUnpinnedIndex === -1) {
+          updatedConversations.push(conv);
+        } else {
+          updatedConversations.splice(firstUnpinnedIndex, 0, conv);
+        }
+      }
     } else {
       // New conversation created out of band, trigger reload
       get().fetchConversations();
@@ -211,16 +263,155 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
-  // Mark conversation read
-  markConversationRead: async (conversationId) => {
-    // 1. Optimistically clear unread badge in sidebar
+  // Handle live message edit
+  handleMessageEdited: (conversationId, updatedMessage) => {
+    set((state) => {
+      const convMessages = state.messagesByConv[conversationId];
+      if (!convMessages) return state;
+
+      const updated = convMessages.map((msg) =>
+        msg._id === updatedMessage._id ? updatedMessage : msg
+      );
+
+      return {
+        messagesByConv: {
+          ...state.messagesByConv,
+          [conversationId]: updated,
+        },
+      };
+    });
+  },
+
+  // Handle live message reaction
+  handleMessageReaction: (conversationId, messageId, reactions) => {
+    set((state) => {
+      const convMessages = state.messagesByConv[conversationId];
+      if (!convMessages) return state;
+
+      const updated = convMessages.map((msg) =>
+        msg._id === messageId ? { ...msg, reactions } : msg
+      );
+
+      return {
+        messagesByConv: {
+          ...state.messagesByConv,
+          [conversationId]: updated,
+        },
+      };
+    });
+  },
+
+  // Handle live poll vote update
+  handleMessagePollVoted: (conversationId, messageId, poll) => {
+    set((state) => {
+      const convMessages = state.messagesByConv[conversationId];
+      if (!convMessages) return state;
+
+      const updated = convMessages.map((msg) =>
+        msg._id === messageId ? { ...msg, poll } : msg
+      );
+
+      return {
+        messagesByConv: {
+          ...state.messagesByConv,
+          [conversationId]: updated,
+        },
+      };
+    });
+  },
+
+  // Handle chat cleared real-time
+  handleConversationCleared: (conversationId, clearedAt, keepStarredOnClear) => {
+    set((state) => {
+      const convMessages = state.messagesByConv[conversationId] || [];
+      const filtered = keepStarredOnClear
+        ? convMessages.filter((m) => m.starredBy && m.starredBy.length > 0)
+        : [];
+
+      return {
+        messagesByConv: {
+          ...state.messagesByConv,
+          [conversationId]: filtered,
+        },
+        conversations: state.conversations.map((c) =>
+          c._id === conversationId ? { ...c, lastMessage: null, unreadCount: 0 } : c
+        ),
+      };
+    });
+  },
+
+  // Handle chat pinned real-time
+  handleConversationPinned: (conversationId, isPinned, pinnedAt) => {
+    set((state) => {
+      const updated = state.conversations.map((c) =>
+        c._id === conversationId ? { ...c, isPinned, pinnedAt } : c
+      );
+      // Re-sort
+      updated.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        if (a.isPinned && b.isPinned) {
+          return new Date(b.pinnedAt).getTime() - new Date(a.pinnedAt).getTime();
+        }
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+      return { conversations: updated };
+    });
+  },
+
+  // Handle chat archived real-time
+  handleConversationArchived: (conversationId, isArchived) => {
+    set((state) => {
+      const { viewArchived } = state;
+      // If we are on active list, remove the archived chat; if on archived list, keep
+      const updated = state.conversations.filter((c) =>
+        viewArchived ? c._id !== conversationId || isArchived : c._id !== conversationId || !isArchived
+      );
+      const newArchivedCount = isArchived
+        ? state.archivedCount + 1
+        : Math.max(0, state.archivedCount - 1);
+
+      return {
+        conversations: updated,
+        archivedCount: newArchivedCount,
+      };
+    });
+  },
+
+  // Handle chat muted real-time
+  handleConversationMuted: (conversationId, mutedUntil) => {
     set((state) => ({
       conversations: state.conversations.map((c) =>
-        c._id === conversationId ? { ...c, unreadCount: 0 } : c
+        c._id === conversationId ? { ...c, isMuted: !!mutedUntil, mutedUntil } : c
       ),
     }));
+  },
 
-    // 2. Call backend
+  // Handle chat unread real-time
+  handleConversationUnread: (conversationId, markedUnread) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c._id === conversationId ? { ...c, markedUnread } : c
+      ),
+    }));
+  },
+
+  // Handle pinned messages in conversation
+  handleConversationPinnedMessages: (conversationId, pinnedMessages) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c._id === conversationId ? { ...c, pinnedMessages } : c
+      ),
+    }));
+  },
+
+  // Mark conversation read
+  markConversationRead: async (conversationId) => {
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c._id === conversationId ? { ...c, unreadCount: 0, markedUnread: false } : c
+      ),
+    }));
     await markMessagesAsReadApi(conversationId).catch(() => {});
   },
 
@@ -230,4 +421,3 @@ export const useChatStore = create((set, get) => ({
   setInfoDrawerOpen: (open) => set({ infoDrawerOpen: open }),
   setReplyingTo: (message) => set({ replyingTo: message }),
 }));
-

@@ -6,7 +6,9 @@ import {
   Users, 
   User, 
   LogOut,
-  Settings
+  Settings,
+  Phone,
+  Star
 } from 'lucide-react';
 import Avatar from '../ui/Avatar.jsx';
 import { useAuthStore } from '../../store/authStore.js';
@@ -16,14 +18,17 @@ export default function IconRail({ activeTab = 'chats', onSelectTab, onOpenProfi
 
   const navItems = [
     { id: 'chats', label: 'Chats', icon: MessageSquare },
-    { id: 'rooms', label: 'Public Rooms', icon: Compass },
+    { id: 'calls', label: 'Calls', icon: Phone },
     { id: 'contacts', label: 'Contacts', icon: Users },
+    { id: 'starred', label: 'Starred', icon: Star },
+    { id: 'rooms', label: 'Public Rooms', icon: Compass },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
-    <aside className="hidden md:flex flex-col items-center justify-between w-[72px] h-[100dvh] bg-deep-900 text-white py-5 z-20 flex-shrink-0 select-none border-r border-deep-800">
-      {/* Top Logo */}
-      <div className="flex flex-col items-center gap-6">
+    <aside className="hidden md:flex flex-col items-center justify-between w-[72px] h-[100dvh] bg-deep-900 text-white py-4 z-20 flex-shrink-0 select-none border-r border-deep-800">
+      {/* Top Logo & Navigation */}
+      <div className="flex flex-col items-center gap-5">
         <div 
           onClick={() => onSelectTab('chats')}
           className="w-12 h-12 rounded-2xl bg-brand-gradient flex items-center justify-center text-white shadow-brand cursor-pointer hover:scale-105 transition-transform"
@@ -33,7 +38,7 @@ export default function IconRail({ activeTab = 'chats', onSelectTab, onOpenProfi
         </div>
 
         {/* Navigation Item Icons */}
-        <nav className="flex flex-col items-center gap-2 mt-2">
+        <nav className="flex flex-col items-center gap-1.5 mt-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -60,7 +65,7 @@ export default function IconRail({ activeTab = 'chats', onSelectTab, onOpenProfi
       </div>
 
       {/* Bottom Profile & Actions */}
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-3">
         {/* Profile Avatar trigger */}
         <button
           onClick={onOpenProfile}
@@ -89,4 +94,3 @@ export default function IconRail({ activeTab = 'chats', onSelectTab, onOpenProfi
     </aside>
   );
 }
-
