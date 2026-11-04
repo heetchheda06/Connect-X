@@ -375,7 +375,11 @@ export const useCallStore = create((set, get) => ({
   // Switch Camera between Front (user) and Rear (environment)
   switchCamera: async () => {
     const { localStream, facingMode, isCameraOff, isSwitchingCamera } = get();
-    if (!localStream || isCameraOff || isSwitchingCamera) return;
+    if (!localStream || isSwitchingCamera) return;
+
+    if (isCameraOff) {
+      get().toggleCamera();
+    }
 
     set({ isSwitchingCamera: true });
     const nextFacingMode = facingMode === 'user' ? 'environment' : 'user';

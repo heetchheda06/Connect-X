@@ -136,7 +136,7 @@ export default function CallModal() {
     const peer = activeCall.peer || {};
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-deep-900/90 backdrop-blur-lg p-4 sm:p-6 animate-fade-in select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-deep-900/90 backdrop-blur-lg p-2 sm:p-6 animate-fade-in select-none">
         {/* Dedicated Remote Audio Player (Essential for voice calls and background audio) */}
         <audio
           ref={remoteAudioRef}
@@ -145,19 +145,19 @@ export default function CallModal() {
           className="hidden"
         />
 
-        <div className="relative w-full max-w-4xl h-[85vh] max-h-[720px] bg-deep-950 rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col justify-between">
+        <div className="relative w-full max-w-4xl h-[92vh] sm:h-[85vh] max-h-[720px] bg-deep-950 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col justify-between">
           
-          {/* Top Bar: Peer info & Timer */}
-          <div className="relative z-20 flex items-center justify-between p-5 bg-gradient-to-b from-black/70 to-transparent">
-            <div className="flex items-center gap-3">
+          {/* Top Bar: Peer info, Timer & Mobile Quick Flip */}
+          <div className="relative z-20 flex items-center justify-between p-3.5 sm:p-5 bg-gradient-to-b from-black/80 via-black/50 to-transparent">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               <Avatar
                 src={peer.avatar}
                 name={peer.name || peer.username}
                 id={peer._id}
                 size="md"
               />
-              <div className="text-left">
-                <h4 className="text-base font-bold text-white">
+              <div className="text-left truncate">
+                <h4 className="text-sm sm:text-base font-bold text-white truncate">
                   {peer.name || peer.username}
                 </h4>
                 <p className="text-xs font-semibold text-brand-300">
@@ -166,9 +166,25 @@ export default function CallModal() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-white text-xs font-medium border border-white/10">
-              <span className={`w-2 h-2 rounded-full ${isRinging ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
-              <span>{isVideo ? 'Encrypted Video' : 'Encrypted Voice'}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Quick Flip Camera button right in the top header */}
+              {isVideo && (
+                <button
+                  type="button"
+                  onClick={switchCamera}
+                  disabled={isSwitchingCamera}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-semibold border border-white/20 active:scale-95 transition-all shadow-md"
+                  title="Flip Camera (Front/Rear)"
+                >
+                  <SwitchCamera className={`w-4 h-4 ${isSwitchingCamera ? 'animate-spin text-brand-300' : ''}`} />
+                  <span className="text-[11px] font-medium">{facingMode === 'user' ? 'Rear' : 'Front'}</span>
+                </button>
+              )}
+
+              <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-white text-xs font-medium border border-white/10">
+                <span className={`w-2 h-2 rounded-full ${isRinging ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
+                <span className="hidden sm:inline">{isVideo ? 'Encrypted Video' : 'Encrypted Voice'}</span>
+              </div>
             </div>
           </div>
 
@@ -204,7 +220,7 @@ export default function CallModal() {
 
             {/* Draggable Local PIP Video */}
             {isVideo && localStream && (
-              <div className="absolute top-4 right-4 w-32 h-44 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-deep-900 z-30 group">
+              <div className="absolute top-16 right-3 sm:top-20 sm:right-6 w-28 h-40 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-deep-900 z-30 group">
                 {!isCameraOff ? (
                   <>
                     <video
@@ -241,11 +257,11 @@ export default function CallModal() {
           </div>
 
           {/* Bottom Call Controls Bar */}
-          <div className="relative z-20 flex items-center justify-center gap-3 sm:gap-6 p-6 bg-gradient-to-t from-black/80 via-black/50 to-transparent">
+          <div className="relative z-20 flex items-center justify-center gap-2.5 sm:gap-6 px-3 py-4 sm:p-6 bg-gradient-to-t from-black/85 via-black/50 to-transparent">
             {/* Mute Audio */}
             <button
               onClick={toggleMute}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              className={`w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-all ${
                 isMuted
                   ? 'bg-status-danger text-white'
                   : 'bg-white/15 text-white hover:bg-white/25'
@@ -259,7 +275,7 @@ export default function CallModal() {
             {isVideo && (
               <button
                 onClick={toggleCamera}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                className={`w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center transition-all ${
                   isCameraOff
                     ? 'bg-status-danger text-white'
                     : 'bg-white/15 text-white hover:bg-white/25'
@@ -270,24 +286,24 @@ export default function CallModal() {
               </button>
             )}
 
-            {/* Switch Camera Button (Video calls only, when camera is on) */}
-            {isVideo && !isCameraOff && (
+            {/* Switch Camera Button (Video calls only) */}
+            {isVideo && (
               <button
                 type="button"
                 onClick={switchCamera}
                 disabled={isSwitchingCamera}
-                className="w-12 h-12 rounded-full flex items-center justify-center bg-white/15 text-white hover:bg-white/25 active:scale-95 transition-all disabled:opacity-50"
+                className="w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 rounded-full flex items-center justify-center bg-white/15 text-white hover:bg-white/25 active:scale-95 transition-all disabled:opacity-50"
                 title={facingMode === 'user' ? 'Switch to Rear Camera' : 'Switch to Front Camera'}
               >
                 <SwitchCamera className={`w-5 h-5 ${isSwitchingCamera ? 'animate-spin text-brand-300' : ''}`} />
               </button>
             )}
 
-            {/* Screen Share (Video calls only) */}
+            {/* Screen Share (Video calls only - hidden on mobile viewports as mobile browsers do not support getDisplayMedia) */}
             {isVideo && (
               <button
                 onClick={toggleScreenShare}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                className={`hidden md:flex w-12 h-12 flex-shrink-0 rounded-full items-center justify-center transition-all ${
                   isScreenSharing
                     ? 'bg-brand-500 text-white'
                     : 'bg-white/15 text-white hover:bg-white/25'
@@ -301,7 +317,7 @@ export default function CallModal() {
             {/* End Call / Cancel */}
             <button
               onClick={isRinging ? cancelCall : endCall}
-              className="w-14 h-14 rounded-full bg-status-danger text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+              className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 rounded-full bg-status-danger text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
               title="End Call"
             >
               <PhoneOff className="w-6 h-6" />
