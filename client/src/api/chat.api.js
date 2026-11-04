@@ -122,6 +122,21 @@ export const setWallpaperApi = async (conversationId, wallpaper) => {
   return response.data;
 };
 
+export const clearAllChatsApi = async () => {
+  const response = await api.post('/settings/chats/clear-all');
+  return response.data;
+};
+
+export const deleteAllChatsApi = async () => {
+  const response = await api.post('/settings/chats/delete-all');
+  return response.data;
+};
+
+export const archiveAllChatsApi = async () => {
+  const response = await api.post('/settings/chats/archive-all');
+  return response.data;
+};
+
 export const exportChatApi = async (conversationId) => {
   const response = await api.get(`/conversations/${conversationId}/export`, {
     responseType: 'blob',
