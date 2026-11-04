@@ -2,15 +2,36 @@ import mongoose from 'mongoose';
 import Conversation from '../models/conversation.model.js';
 import Message from '../models/message.model.js';
 import User from '../models/user.model.js';
+import ConversationUserState from '../models/conversationUserState.model.js';
+import Contact from '../models/contact.model.js';
+
+const isMuted = (mutedUntil) => {
+  if (!mutedUntil) return false;
+  if (mutedUntil === 'forever') return true;
+  const d = new Date(mutedUntil);
+  return !isNaN(d.getTime()) && d > new Date();
+};
 
 /**
- * Get all conversations for current user with unread counts & latest message
- * GET /api/conversations
+ * Get all conversations for current user with unread counts, latest message, and per-user state
+ * GET /api/conversations?archived=true|false
  */
 export const getConversations = async (req, res, next) => {
   try {
     const currentUserId = req.user._id;
+    const isArchivedQuery = req.query.archived === 'true';
 
+    // 1. Fetch user states for all conversations
+    const userStates = await ConversationUserState.find({
+      user: currentUserId,
+    }).lean();
+    const stateMap = new Map(userStates.map((s) => [s.conversation.toString(), s]));
+
+    // 2. Fetch contacts for current user to attach private nicknames
+    const contacts = await Contact.find({ owner: currentUserId }).lean();
+    const contactMap = new Map(contacts.map((c) => [c.contactUser.toString(), c]));
+
+    // 3. Find all conversations user is a member of
     const conversations = await Conversation.find({
       'members.user': currentUserId,
     })
@@ -25,35 +46,132 @@ export const getConversations = async (req, res, next) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    // Compute unread count for each conversation
-    const conversationsWithUnread = await Promise.all(
-      conversations.map(async (conv) => {
-        const memberInfo = conv.members.find((m) =>
-          m.user?._id?.toString() === currentUserId.toString()
+    // Count total archived conversations for user
+    let archivedCount = 0;
+    for (const conv of conversations) {
+      const state = stateMap.get(conv._id.toString());
+      if (state?.archived && !state?.hidden) {
+        archivedCount++;
+      }
+    }
+
+    // 4. Compute unread count, per-user states, and filtering
+    const processedConversations = [];
+
+    for (const conv of conversations) {
+      const state = stateMap.get(conv._id.toString());
+      const isArchived = !!state?.archived;
+      const isPinned = !!state?.pinnedAt;
+      const pinnedAt = state?.pinnedAt || null;
+      let isHidden = !!state?.hidden;
+
+      // If hidden, check if a new message has arrived after clearedAt to un-hide it
+      if (isHidden) {
+        if (conv.lastMessage && state?.clearedAt && new Date(conv.lastMessage.createdAt) > new Date(state.clearedAt)) {
+          isHidden = false;
+          ConversationUserState.updateOne(
+            { user: currentUserId, conversation: conv._id },
+            { $set: { hidden: false } }
+          ).catch(() => {});
+        } else {
+          // Still hidden, skip
+          continue;
+        }
+      }
+
+      // Filter by archive state
+      if (isArchivedQuery && !isArchived) continue;
+      if (!isArchivedQuery && isArchived) continue;
+
+      const memberInfo = conv.members.find(
+        (m) => m.user?._id?.toString() === currentUserId.toString()
+      );
+
+      // Check clearedAt filter for unread count and preview
+      const unreadQuery = {
+        conversation: conv._id,
+        sender: { $ne: currentUserId },
+        'readBy.user': { $ne: currentUserId },
+        deletedFor: { $ne: currentUserId },
+        isDeletedForEveryone: false,
+      };
+
+      if (state?.clearedAt) {
+        if (state.keepStarredOnClear) {
+          unreadQuery.$or = [
+            { createdAt: { $gt: state.clearedAt } },
+            { starredBy: currentUserId },
+          ];
+        } else {
+          unreadQuery.createdAt = { $gt: state.clearedAt };
+        }
+      }
+
+      // Exclude expired disappearing messages
+      unreadQuery.$and = [
+        { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
+      ];
+
+      const unreadCount = await Message.countDocuments(unreadQuery);
+
+      // Check if lastMessage was before clearedAt
+      let lastMessagePreview = conv.lastMessage;
+      if (
+        lastMessagePreview &&
+        state?.clearedAt &&
+        new Date(lastMessagePreview.createdAt) <= new Date(state.clearedAt)
+      ) {
+        if (!state.keepStarredOnClear || !lastMessagePreview.starredBy?.includes(currentUserId)) {
+          lastMessagePreview = null;
+        }
+      }
+
+      // Check if direct conversation has private contact nickname
+      let nickname = '';
+      if (conv.type === 'direct') {
+        const otherMember = conv.members.find(
+          (m) => m.user?._id?.toString() !== currentUserId.toString()
         );
+        if (otherMember?.user?._id) {
+          const c = contactMap.get(otherMember.user._id.toString());
+          if (c?.nickname) nickname = c.nickname;
+        }
+      }
 
-        // Count messages sent by others that have not been read by current user and not deleted
-        const unreadCount = await Message.countDocuments({
-          conversation: conv._id,
-          sender: { $ne: currentUserId },
-          'readBy.user': { $ne: currentUserId },
-          deletedFor: { $ne: currentUserId },
-          isDeletedForEveryone: false,
-        });
+      processedConversations.push({
+        ...conv,
+        lastMessage: lastMessagePreview,
+        unreadCount,
+        lastReadMessage: memberInfo?.lastReadMessage || null,
+        isPinned,
+        pinnedAt,
+        isArchived,
+        isMuted: isMuted(state?.mutedUntil),
+        mutedUntil: state?.mutedUntil || null,
+        markedUnread: !!state?.markedUnread,
+        wallpaper: state?.wallpaper || '',
+        contactNickname: nickname,
+      });
+    }
 
-        return {
-          ...conv,
-          unreadCount,
-          lastReadMessage: memberInfo?.lastReadMessage || null,
-        };
-      })
-    );
+    // 5. Sort: Pinned first (sorted by pinnedAt desc), then by lastMessage/updatedAt desc
+    processedConversations.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      if (a.isPinned && b.isPinned) {
+        return new Date(b.pinnedAt).getTime() - new Date(a.pinnedAt).getTime();
+      }
+      const timeA = new Date(a.lastMessage?.createdAt || a.updatedAt).getTime();
+      const timeB = new Date(b.lastMessage?.createdAt || b.updatedAt).getTime();
+      return timeB - timeA;
+    });
 
     return res.status(200).json({
       success: true,
       message: 'Conversations retrieved successfully',
       data: {
-        conversations: conversationsWithUnread,
+        conversations: processedConversations,
+        archivedCount,
       },
     });
   } catch (error) {

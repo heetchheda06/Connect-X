@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import Message from '../models/message.model.js';
 import Conversation from '../models/conversation.model.js';
 import Translation from '../models/translation.model.js';
+import ConversationUserState from '../models/conversationUserState.model.js';
+import Block from '../models/block.model.js';
 import { assistantService } from '../services/ai/assistantService.js';
 import { voiceService } from '../services/ai/voiceService.js';
 
@@ -37,7 +39,17 @@ export const getMessages = async (req, res, next) => {
       });
     }
 
-    // Build query: not deleted for current user
+    // 1. Fetch user state for clearedAt and starred messages
+    const userState = await ConversationUserState.findOne({
+      user: currentUserId,
+      conversation: conversationId,
+    }).lean();
+
+    // 2. Fetch blocked users to exclude or collapse
+    const blockedRecords = await Block.find({ blocker: currentUserId }).select('blocked').lean();
+    const blockedSet = new Set(blockedRecords.map((b) => b.blocked.toString()));
+
+    // 3. Build query: not deleted for current user
     const query = {
       conversation: conversationId,
       deletedFor: { $ne: currentUserId },
@@ -46,6 +58,22 @@ export const getMessages = async (req, res, next) => {
     if (cursor) {
       query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
     }
+
+    if (userState?.clearedAt) {
+      if (userState.keepStarredOnClear) {
+        query.$or = [
+          { createdAt: { $gt: userState.clearedAt } },
+          { starredBy: currentUserId },
+        ];
+      } else {
+        query.createdAt = { $gt: userState.clearedAt };
+      }
+    }
+
+    // Exclude expired disappearing messages
+    query.$and = [
+      { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
+    ];
 
     const rawMessages = await Message.find(query)
       .sort({ _id: -1 })
@@ -65,17 +93,29 @@ export const getMessages = async (req, res, next) => {
     const messagesToReturn = hasMore ? rawMessages.slice(0, pageSize) : rawMessages;
     const nextCursor = hasMore ? messagesToReturn[messagesToReturn.length - 1]._id : null;
 
-    // Mask deleted-for-everyone messages and order chronologically (oldest -> newest)
+    // Mask deleted-for-everyone messages, handle blocked sender filtering, and order chronologically
     const formattedMessages = messagesToReturn
+      .filter((msg) => {
+        // In direct chat, if current user blocked the sender, do not show messages sent by the blocked person
+        if (conversation.type === 'direct' && blockedSet.has(msg.sender?._id?.toString())) {
+          return false;
+        }
+        return true;
+      })
       .map((msg) => {
+        const isBlocked = blockedSet.has(msg.sender?._id?.toString());
         if (msg.isDeletedForEveryone) {
           return {
             ...msg,
             content: '🚫 This message was deleted',
             attachment: null,
+            blockedSender: isBlocked,
           };
         }
-        return msg;
+        return {
+          ...msg,
+          blockedSender: isBlocked,
+        };
       })
       .reverse();
 
@@ -133,10 +173,35 @@ export const sendMessage = async (req, res, next) => {
       }
     }
 
-    if (!content.trim() && !attachment) {
+    // Check group permissions (only admins can send)
+    if (
+      (conversation.type === 'group' || conversation.type === 'room') &&
+      conversation.onlyAdminsCanSend
+    ) {
+      const currentMember = conversation.members.find(
+        (m) => m.user.toString() === currentUserId.toString()
+      );
+      if (!currentMember || currentMember.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can send messages in this group',
+          data: null,
+        });
+      }
+    }
+
+    const {
+      aiCard = null,
+      poll = null,
+      call = null,
+      linkPreview = null,
+      mentions = [],
+    } = req.body;
+
+    if (!content.trim() && !attachment && !poll && !call) {
       return res.status(400).json({
         success: false,
-        message: 'Message must contain either text content or an attachment',
+        message: 'Message must contain either text content, attachment, poll, or call event',
         data: null,
       });
     }
@@ -145,11 +210,40 @@ export const sendMessage = async (req, res, next) => {
     let determinedType = type;
     if (attachment && type === 'text') {
       if (attachment.mimeType?.startsWith('image/')) determinedType = 'image';
+      else if (attachment.mimeType?.startsWith('video/')) determinedType = 'video';
       else if (attachment.mimeType?.startsWith('audio/')) determinedType = 'voice';
       else determinedType = 'file';
+    } else if (poll) {
+      determinedType = 'poll';
+    } else if (call) {
+      determinedType = 'call';
     }
 
-    const { aiCard = null } = req.body;
+    // Check block status for direct conversations
+    let isRecipientBlocked = false;
+    let recipientId = null;
+    if (conversation.type === 'direct') {
+      const otherMember = conversation.members.find(
+        (m) => m.user.toString() !== currentUserId.toString()
+      );
+      if (otherMember) {
+        recipientId = otherMember.user.toString();
+        // Check if the other person has blocked current user
+        const blockedExists = await Block.exists({
+          blocker: recipientId,
+          blocked: currentUserId,
+        });
+        if (blockedExists) {
+          isRecipientBlocked = true;
+        }
+      }
+    }
+
+    // Calculate disappearing message expiration
+    let expiresAt = null;
+    if (conversation.disappearing?.durationSec) {
+      expiresAt = new Date(Date.now() + conversation.disappearing.durationSec * 1000);
+    }
 
     const message = await Message.create({
       conversation: conversationId,
@@ -158,13 +252,25 @@ export const sendMessage = async (req, res, next) => {
       content: content.trim(),
       attachment,
       aiCard: aiCard || null,
+      poll: poll
+        ? {
+            ...poll,
+            createdBy: currentUserId,
+          }
+        : null,
+      call: call || null,
+      linkPreview: linkPreview || null,
+      mentions: mentions || [],
+      expiresAt,
       replyTo: replyTo || null,
       deliveredTo: [currentUserId],
       readBy: [{ user: currentUserId, readAt: new Date() }],
     });
 
-    // Update conversation lastMessage & member's lastReadMessage
-    conversation.lastMessage = message._id;
+    // Update conversation lastMessage & member's lastReadMessage (only if not blocked by recipient)
+    if (!isRecipientBlocked) {
+      conversation.lastMessage = message._id;
+    }
     const memberIndex = conversation.members.findIndex(
       (m) => m.user.toString() === currentUserId.toString()
     );
@@ -187,16 +293,41 @@ export const sendMessage = async (req, res, next) => {
     // Broadcast live to Socket.IO room & member inboxes
     const io = req.app.get('io');
     if (io) {
-      io.to(`conversation:${conversationId}`).emit('message:new', {
-        conversationId,
-        message: populated,
-      });
-      for (const member of conversation.members) {
-        io.to(`user:${member.user.toString()}`).emit('conversation:updated', {
+      if (isRecipientBlocked) {
+        // If blocked, deliver socket event ONLY to sender's own devices (shows 1 tick sent)
+        io.to(`user:${currentUserId.toString()}`).emit('message:new', {
           conversationId,
-          lastMessage: populated,
-          senderId: currentUserId.toString(),
+          message: populated,
         });
+      } else {
+        // Standard delivery to conversation room and members
+        io.to(`conversation:${conversationId}`).emit('message:new', {
+          conversationId,
+          message: populated,
+        });
+        for (const member of conversation.members) {
+          io.to(`user:${member.user.toString()}`).emit('conversation:updated', {
+            conversationId,
+            lastMessage: populated,
+            senderId: currentUserId.toString(),
+          });
+        }
+
+        // Un-hide conversation for recipient members whose state was hidden
+        const recipientUserIds = conversation.members
+          .map((m) => m.user.toString())
+          .filter((uid) => uid !== currentUserId.toString());
+
+        if (recipientUserIds.length > 0) {
+          ConversationUserState.updateMany(
+            {
+              conversation: conversationId,
+              user: { $in: recipientUserIds },
+              hidden: true,
+            },
+            { $set: { hidden: false } }
+          ).catch(() => {});
+        }
       }
 
       // In-chat AI Assistant trigger: Check for @connectx mention
