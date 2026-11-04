@@ -25,6 +25,26 @@ const memberSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const pinnedMessageSchema = new mongoose.Schema(
+  {
+    message: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Message',
+      required: true,
+    },
+    pinnedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    pinnedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const conversationSchema = new mongoose.Schema(
   {
     type: {
@@ -73,6 +93,47 @@ const conversationSchema = new mongoose.Schema(
       sparse: true,
       unique: true,
     },
+    // Disappearing messages per conversation (null = off, 86400 = 24h, 604800 = 7d, 7776000 = 90d)
+    disappearing: {
+      durationSec: {
+        type: Number,
+        default: null,
+      },
+      setBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+      },
+      setAt: {
+        type: Date,
+        default: null,
+      },
+    },
+    // Group invite link token
+    inviteToken: {
+      type: String,
+      sparse: true,
+      index: true,
+      default: null,
+    },
+    // Group permissions
+    onlyAdminsCanSend: {
+      type: Boolean,
+      default: false,
+    },
+    onlyAdminsCanEditInfo: {
+      type: Boolean,
+      default: false,
+    },
+    // Pinned messages in this conversation (max 3)
+    pinnedMessages: {
+      type: [pinnedMessageSchema],
+      default: [],
+      validate: [
+        (val) => val.length <= 3,
+        'Cannot pin more than 3 messages per conversation',
+      ],
+    },
     // AI Conversation Mode & Consent (Section 6)
     ai: {
       mode: {
@@ -112,4 +173,3 @@ conversationSchema.index({ isPublic: 1, type: 1 });
 
 export const Conversation = mongoose.model('Conversation', conversationSchema);
 export default Conversation;
-

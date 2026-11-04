@@ -182,6 +182,70 @@ const userSchema = new mongoose.Schema(
         },
       ],
     },
+    // Granular Privacy Settings
+    privacy: {
+      lastSeen: {
+        type: String,
+        enum: ['everyone', 'contacts', 'nobody'],
+        default: 'everyone',
+      },
+      online: {
+        type: String,
+        enum: ['everyone', 'sameAsLastSeen'],
+        default: 'everyone',
+      },
+      profilePhoto: {
+        type: String,
+        enum: ['everyone', 'contacts', 'nobody'],
+        default: 'everyone',
+      },
+      about: {
+        type: String,
+        enum: ['everyone', 'contacts', 'nobody'],
+        default: 'everyone',
+      },
+      readReceipts: {
+        type: Boolean,
+        default: true,
+      },
+      addToGroups: {
+        type: String,
+        enum: ['everyone', 'contacts'],
+        default: 'everyone',
+      },
+      linkPreviews: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    // Granular Notification Settings
+    notifications: {
+      sound: {
+        type: Boolean,
+        default: true,
+      },
+      messagePreview: {
+        type: Boolean,
+        default: true,
+      },
+      desktop: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    // User chat preferences & wallpapers
+    defaultWallpaper: {
+      type: String,
+      default: '',
+    },
+    enterIsSend: {
+      type: Boolean,
+      default: true,
+    },
+    keepChatsArchived: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
