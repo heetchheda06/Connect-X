@@ -16,6 +16,8 @@ import {
   getMessages,
   sendMessage,
   markMessagesAsRead,
+  pinMessageInConversation,
+  unpinMessageInConversation,
 } from '../controllers/message.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
@@ -47,6 +49,8 @@ router.post('/:id/promote', promoteMemberToAdmin);
 router.get('/:id/messages', getMessages);
 router.post('/:id/messages', sendMessage);
 router.post('/:id/read', markMessagesAsRead);
+router.post('/:id/pin-message', pinMessageInConversation);
+router.delete('/:id/pin-message/:messageId', unpinMessageInConversation);
 
 export default router;
 

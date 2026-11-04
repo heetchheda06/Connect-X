@@ -526,3 +526,582 @@ export const deleteMessage = async (req, res, next) => {
   }
 };
 
+/**
+ * Edit a message (sender only, within 15 minutes, text messages only)
+ * PUT /api/messages/:id
+ */
+export const editMessage = async (req, res, next) => {
+  try {
+    const { id: messageId } = req.params;
+    const { content } = req.body;
+    const currentUserId = req.user._id;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message content cannot be empty',
+        data: null,
+      });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Message not found',
+        data: null,
+      });
+    }
+
+    if (message.sender.toString() !== currentUserId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit your own messages',
+        data: null,
+      });
+    }
+
+    if (message.type !== 'text') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only text messages can be edited',
+        data: null,
+      });
+    }
+
+    if (message.isDeletedForEveryone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Deleted messages cannot be edited',
+        data: null,
+      });
+    }
+
+    // 15-minute edit window check
+    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+    const messageAge = Date.now() - new Date(message.createdAt).getTime();
+    if (messageAge > FIFTEEN_MINUTES_MS) {
+      return res.status(400).json({
+        success: false,
+        message: 'Messages can only be edited within 15 minutes of sending',
+        data: null,
+      });
+    }
+
+    message.content = content.trim();
+    message.edited = { at: new Date() };
+    await message.save();
+
+    // Invalidate cached translations
+    await Translation.deleteMany({ message: message._id }).catch(() => {});
+
+    const populated = await Message.findById(message._id)
+      .populate('sender', '_id name username avatar isOnline lastSeen')
+      .populate({
+        path: 'replyTo',
+        select: '_id content type attachment sender isDeletedForEveryone',
+        populate: {
+          path: 'sender',
+          select: '_id name username avatar',
+        },
+      });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${message.conversation}`).emit('message:edited', {
+        conversationId: message.conversation,
+        message: populated,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Message edited successfully',
+      data: { message: populated },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Forward messages to up to 5 target conversations
+ * POST /api/messages/forward
+ */
+export const forwardMessages = async (req, res, next) => {
+  try {
+    const { messageIds = [], targetConversationIds = [] } = req.body;
+    const currentUserId = req.user._id;
+
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one message ID is required',
+        data: null,
+      });
+    }
+
+    if (!Array.isArray(targetConversationIds) || targetConversationIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one target conversation ID is required',
+        data: null,
+      });
+    }
+
+    if (targetConversationIds.length > 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'You can only forward messages to up to 5 conversations at once',
+        data: null,
+      });
+    }
+
+    const messages = await Message.find({
+      _id: { $in: messageIds },
+      isDeletedForEveryone: false,
+    }).lean();
+
+    if (messages.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No valid messages found to forward',
+        data: null,
+      });
+    }
+
+    const io = req.app.get('io');
+    const forwardedResults = [];
+
+    for (const targetConvId of targetConversationIds) {
+      const conv = await Conversation.findById(targetConvId);
+      if (!conv) continue;
+
+      const isMember = conv.members.some(
+        (m) => m.user.toString() === currentUserId.toString()
+      );
+      if (!isMember) continue;
+
+      for (const srcMsg of messages) {
+        let expiresAt = null;
+        if (conv.disappearing?.durationSec) {
+          expiresAt = new Date(Date.now() + conv.disappearing.durationSec * 1000);
+        }
+
+        const newMsg = await Message.create({
+          conversation: targetConvId,
+          sender: currentUserId,
+          type: srcMsg.type,
+          content: srcMsg.content || '',
+          attachment: srcMsg.attachment || null,
+          poll: srcMsg.poll
+            ? {
+                question: srcMsg.poll.question,
+                options: srcMsg.poll.options.map((o) => ({
+                  id: o.id,
+                  text: o.text,
+                  voters: [],
+                })),
+                allowMultiple: srcMsg.poll.allowMultiple,
+                createdBy: currentUserId,
+              }
+            : null,
+          forwarded: true,
+          expiresAt,
+          deliveredTo: [currentUserId],
+          readBy: [{ user: currentUserId, readAt: new Date() }],
+        });
+
+        conv.lastMessage = newMsg._id;
+        await conv.save();
+
+        const populated = await Message.findById(newMsg._id).populate(
+          'sender',
+          '_id name username avatar isOnline lastSeen'
+        );
+
+        if (io) {
+          io.to(`conversation:${targetConvId}`).emit('message:new', {
+            conversationId: targetConvId,
+            message: populated,
+          });
+          for (const member of conv.members) {
+            io.to(`user:${member.user.toString()}`).emit('conversation:updated', {
+              conversationId: targetConvId,
+              lastMessage: populated,
+              senderId: currentUserId.toString(),
+            });
+          }
+        }
+
+        forwardedResults.push(populated);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Forwarded ${messages.length} message(s) to ${targetConversationIds.length} chat(s)`,
+      data: { count: forwardedResults.length },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Star or unstar a message
+ * POST /api/messages/:id/star
+ * DELETE /api/messages/:id/star
+ */
+export const starMessage = async (req, res, next) => {
+  try {
+    const { id: messageId } = req.params;
+    const currentUserId = req.user._id;
+
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      { $addToSet: { starredBy: currentUserId } },
+      { new: true }
+    );
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: 'Message not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Message starred',
+      data: { messageId, isStarred: true },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unstarMessage = async (req, res, next) => {
+  try {
+    const { id: messageId } = req.params;
+    const currentUserId = req.user._id;
+
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      { $pull: { starredBy: currentUserId } },
+      { new: true }
+    );
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: 'Message not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Message unstarred',
+      data: { messageId, isStarred: false },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all starred messages for current user
+ * GET /api/messages/starred?conversationId=
+ */
+export const getStarredMessages = async (req, res, next) => {
+  try {
+    const currentUserId = req.user._id;
+    const { conversationId } = req.query;
+
+    const query = {
+      starredBy: currentUserId,
+      deletedFor: { $ne: currentUserId },
+      isDeletedForEveryone: false,
+    };
+
+    if (conversationId) {
+      query.conversation = conversationId;
+    }
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .populate('sender', '_id name username avatar')
+      .populate('conversation', '_id name type avatar')
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: { messages },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Add or toggle a reaction on a message
+ * POST /api/messages/:id/reactions
+ */
+export const reactToMessage = async (req, res, next) => {
+  try {
+    const { id: messageId } = req.params;
+    const { emoji } = req.body;
+    const currentUserId = req.user._id;
+
+    if (!emoji || !emoji.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Emoji is required',
+        data: null,
+      });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ success: false, message: 'Message not found' });
+    }
+
+    const existingIndex = message.reactions.findIndex(
+      (r) => r.user.toString() === currentUserId.toString()
+    );
+
+    if (existingIndex !== -1) {
+      if (message.reactions[existingIndex].emoji === emoji) {
+        // Same emoji toggles it off
+        message.reactions.splice(existingIndex, 1);
+      } else {
+        // Different emoji replaces previous reaction
+        message.reactions[existingIndex].emoji = emoji;
+        message.reactions[existingIndex].at = new Date();
+      }
+    } else {
+      // Add new reaction
+      message.reactions.push({
+        user: currentUserId,
+        emoji,
+        at: new Date(),
+      });
+    }
+
+    await message.save();
+
+    const populated = await Message.findById(messageId)
+      .populate('reactions.user', '_id name username avatar');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${message.conversation}`).emit('message:reaction', {
+        messageId: message._id,
+        conversationId: message.conversation,
+        reactions: populated.reactions,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Reaction updated',
+      data: {
+        messageId: message._id,
+        reactions: populated.reactions,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Pin or unpin a message inside a conversation (max 3 pinned messages)
+ * POST /api/conversations/:id/pin-message
+ * DELETE /api/conversations/:id/pin-message/:messageId
+ */
+export const pinMessageInConversation = async (req, res, next) => {
+  try {
+    const { id: conversationId } = req.params;
+    const { messageId } = req.body;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    const isMember = conversation.members.some(
+      (m) => m.user.toString() === currentUserId.toString()
+    );
+    if (!isMember) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message || message.conversation.toString() !== conversationId) {
+      return res.status(404).json({ success: false, message: 'Message not found in this chat' });
+    }
+
+    // Check already pinned
+    const alreadyPinned = conversation.pinnedMessages.some(
+      (p) => p.message.toString() === messageId.toString()
+    );
+    if (alreadyPinned) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message is already pinned in this conversation',
+      });
+    }
+
+    if (conversation.pinnedMessages.length >= 3) {
+      // Unpin oldest to maintain max 3
+      conversation.pinnedMessages.shift();
+    }
+
+    conversation.pinnedMessages.push({
+      message: messageId,
+      pinnedBy: currentUserId,
+      pinnedAt: new Date(),
+    });
+    await conversation.save();
+
+    const populatedConv = await Conversation.findById(conversationId)
+      .populate('pinnedMessages.message')
+      .populate('pinnedMessages.pinnedBy', '_id name username avatar');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit('conversation:pinned-messages', {
+        conversationId,
+        pinnedMessages: populatedConv.pinnedMessages,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Message pinned',
+      data: { pinnedMessages: populatedConv.pinnedMessages },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const unpinMessageInConversation = async (req, res, next) => {
+  try {
+    const { id: conversationId, messageId } = req.params;
+    const currentUserId = req.user._id;
+
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, message: 'Conversation not found' });
+    }
+
+    conversation.pinnedMessages = conversation.pinnedMessages.filter(
+      (p) => p.message.toString() !== messageId.toString()
+    );
+    await conversation.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${conversationId}`).emit('conversation:pinned-messages', {
+        conversationId,
+        pinnedMessages: conversation.pinnedMessages,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Message unpinned',
+      data: { pinnedMessages: conversation.pinnedMessages },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Vote in a poll
+ * POST /api/messages/:id/vote
+ */
+export const votePoll = async (req, res, next) => {
+  try {
+    const { id: messageId } = req.params;
+    const { optionId } = req.body;
+    const currentUserId = req.user._id;
+
+    if (!optionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Option ID is required',
+        data: null,
+      });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message || !message.poll) {
+      return res.status(404).json({
+        success: false,
+        message: 'Poll message not found',
+        data: null,
+      });
+    }
+
+    if (message.poll.closedAt) {
+      return res.status(400).json({
+        success: false,
+        message: 'This poll is closed',
+        data: null,
+      });
+    }
+
+    const targetOpt = message.poll.options.find((o) => o.id === optionId);
+    if (!targetOpt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Poll option not found',
+        data: null,
+      });
+    }
+
+    const uidStr = currentUserId.toString();
+    const alreadyVotedTarget = targetOpt.voters.some((v) => v.toString() === uidStr);
+
+    if (message.poll.allowMultiple) {
+      if (alreadyVotedTarget) {
+        // Toggle off
+        targetOpt.voters = targetOpt.voters.filter((v) => v.toString() !== uidStr);
+      } else {
+        targetOpt.voters.push(currentUserId);
+      }
+    } else {
+      // Single vote: remove from all options, then toggle selected
+      for (const opt of message.poll.options) {
+        opt.voters = opt.voters.filter((v) => v.toString() !== uidStr);
+      }
+      if (!alreadyVotedTarget) {
+        targetOpt.voters.push(currentUserId);
+      }
+    }
+
+    await message.save();
+
+    const populated = await Message.findById(messageId).populate(
+      'poll.options.voters',
+      '_id name username avatar'
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${message.conversation}`).emit('message:poll-voted', {
+        messageId: message._id,
+        conversationId: message.conversation,
+        poll: populated.poll,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Vote recorded',
+      data: { poll: populated.poll },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
