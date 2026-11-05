@@ -134,3 +134,4 @@ test('E1 - Health and Readiness Controller Probes', async () => {
   assert.ok(readyBody.data.database, 'Readiness response must report database state');
   assert.ok(readyBody.data.emailWorker, 'Readiness response must report email worker state');
 });
+

@@ -6,6 +6,9 @@ import ProtectedRoute from './components/layout/ProtectedRoute.jsx';
 import PublicRoute from './components/layout/PublicRoute.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import ChatPage from './pages/ChatPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
+import VerifyEmailPage from './pages/VerifyEmailPage.jsx';
 
 export default function App() {
   const { checkAuth } = useAuthStore();
@@ -64,6 +67,26 @@ export default function App() {
               <AuthPage initialMode="register" />
             </PublicRoute>
           }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicRoute>
+              <ForgotPasswordPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <PublicRoute>
+              <ResetPasswordPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/verify-email"
+          element={<VerifyEmailPage />}
         />
 
         {/* Protected Authenticated Routes */}

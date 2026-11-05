@@ -74,6 +74,16 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    failedLogin: {
+      count: {
+        type: Number,
+        default: 0,
+      },
+      lockUntil: {
+        type: Date,
+        default: null,
+      },
+    },
     avatarSource: {
       type: String,
       enum: ['upload', 'google', 'generated'],

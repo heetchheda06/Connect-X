@@ -57,3 +57,4 @@ emailJobSchema.index({ status: 1, nextRunAt: 1 });
 
 export const EmailJob = mongoose.model('EmailJob', emailJobSchema);
 export default EmailJob;
+

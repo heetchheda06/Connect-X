@@ -168,3 +168,4 @@ export function htmlToPlainText(html) {
     .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
 }
+

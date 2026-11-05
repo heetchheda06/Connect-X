@@ -4,6 +4,13 @@ import {
   register,
   login,
   googleLogin,
+  verifyEmail,
+  resendVerification,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+  changeEmail,
+  confirmEmailChange,
   setPassword,
   getAuthProviders,
   unlinkGoogle,
@@ -41,8 +48,8 @@ const registerRules = [
   body('password')
     .notEmpty()
     .withMessage('Password is required')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
   body('confirmPassword')
     .notEmpty()
     .withMessage('Please confirm your password')
@@ -73,13 +80,99 @@ const googleLoginRules = [
     .withMessage('Invalid token length'),
 ];
 
+const verifyEmailRules = [
+  body('token')
+    .isString()
+    .notEmpty()
+    .withMessage('Verification token is required'),
+];
+
+const resendVerificationRules = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+];
+
+const forgotPasswordRules = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+];
+
+const resetPasswordRules = [
+  body('token')
+    .isString()
+    .notEmpty()
+    .withMessage('Reset token is required'),
+  body('password')
+    .isString()
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
+  body('confirmPassword')
+    .isString()
+    .notEmpty()
+    .withMessage('Please confirm your password')
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    }),
+];
+
+const changePasswordRules = [
+  body('newPassword')
+    .isString()
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters long'),
+  body('confirmPassword')
+    .isString()
+    .notEmpty()
+    .withMessage('Please confirm your new password')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    }),
+];
+
+const changeEmailRules = [
+  body('newEmail')
+    .trim()
+    .notEmpty()
+    .withMessage('New email address is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+];
+
+const confirmEmailChangeRules = [
+  body('token')
+    .isString()
+    .notEmpty()
+    .withMessage('Confirmation token is required'),
+];
+
 const setPasswordRules = [
   body('password')
     .isString()
     .notEmpty()
     .withMessage('Password is required')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long'),
 ];
 
 // Public Auth routes
@@ -87,10 +180,19 @@ router.post('/register', authLimiter, validate(registerRules), register);
 router.post('/login', authLimiter, validate(loginRules), login);
 router.post('/google', authLimiter, validate(googleLoginRules), googleLogin);
 
-// Protected Auth & Session routes
+// Email Verification & Password Recovery routes
+router.post('/verify-email', authLimiter, validate(verifyEmailRules), verifyEmail);
+router.post('/resend-verification', authLimiter, validate(resendVerificationRules), resendVerification);
+router.post('/forgot-password', authLimiter, validate(forgotPasswordRules), forgotPassword);
+router.post('/reset-password', authLimiter, validate(resetPasswordRules), resetPassword);
+
+// Protected Auth, Session & Security routes
 router.get('/me', protect, getMe);
 router.post('/logout', protect, logout);
 router.get('/providers', protect, getAuthProviders);
+router.post('/change-password', protect, authLimiter, validate(changePasswordRules), changePassword);
+router.post('/change-email', protect, authLimiter, validate(changeEmailRules), changeEmail);
+router.post('/confirm-email-change', authLimiter, validate(confirmEmailChangeRules), confirmEmailChange);
 router.post('/set-password', protect, authLimiter, validate(setPasswordRules), setPassword);
 router.post('/unlink-google', protect, authLimiter, unlinkGoogle);
 

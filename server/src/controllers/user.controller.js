@@ -1,6 +1,7 @@
 import User from '../models/user.model.js';
 import storageService from '../services/storage.service.js';
 import { isValidUsername } from '../services/usernameService.js';
+import { env } from '../config/env.js';
 
 /**
  * Search users by name or username
@@ -23,10 +24,17 @@ export const searchUsers = async (req, res, next) => {
     const escapedQuery = trimmedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedQuery, 'i');
 
-    const users = await User.find({
+    const searchFilter = {
       _id: { $ne: req.user._id },
       $or: [{ name: regex }, { username: regex }],
-    })
+    };
+
+    // When verification is enforced, unverified users are hidden from public search
+    if (env.requireEmailVerification) {
+      searchFilter.emailVerified = true;
+    }
+
+    const users = await User.find(searchFilter)
       .select('_id name username avatar bio status isOnline lastSeen createdAt')
       .limit(20)
       .lean();

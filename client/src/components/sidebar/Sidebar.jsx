@@ -7,6 +7,7 @@ import { useChatStore } from '../../store/chatStore.js';
 import { useAuthStore } from '../../store/authStore.js';
 import { clearChatApi, deleteChatApi } from '../../api/chat.api.js';
 import { toast } from 'react-hot-toast';
+import UnverifiedEmailBanner from '../layout/UnverifiedEmailBanner.jsx';
 
 export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
   const { user } = useAuthStore();
@@ -81,6 +82,8 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
 
   return (
     <aside className="w-full md:w-[340px] lg:w-[360px] h-[100dvh] bg-surface border-r border-border-main flex flex-col flex-shrink-0 z-10 select-none">
+      <UnverifiedEmailBanner />
+
       {/* Top Header */}
       <div className="p-4 pb-3 border-b border-border-main/60 flex items-center justify-between">
         <div className="flex items-center gap-2">

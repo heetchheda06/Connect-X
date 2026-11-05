@@ -23,6 +23,7 @@ import CallModal from '../components/modals/CallModal.jsx';
 import SettingsModal from '../components/modals/SettingsModal.jsx';
 import AiDrawer from '../components/chat/AiDrawer.jsx';
 import ReconnectingBanner from '../components/layout/ReconnectingBanner.jsx';
+import UnverifiedEmailBanner from '../components/layout/UnverifiedEmailBanner.jsx';
 import ErrorBoundary from '../components/ui/ErrorBoundary.jsx';
 import { useAuthStore } from '../store/authStore.js';
 import { useChatStore } from '../store/chatStore.js';

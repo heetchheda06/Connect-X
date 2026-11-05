@@ -26,6 +26,7 @@ import {
   unpinMessageInConversation,
 } from '../controllers/message.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
+import { requireEmailVerified } from '../middleware/emailVerified.middleware.js';
 
 const router = express.Router();
 
@@ -36,14 +37,14 @@ router.use(protect);
 router.get('/', getConversations);
 router.get('/rooms/discover', discoverRooms);
 
-// Direct & Group creation
-router.post('/direct', createOrGetDirectConversation);
-router.post('/group', createGroupConversation);
+// Direct & Group creation (Blocked if email verification is enforced and user is unverified)
+router.post('/direct', requireEmailVerified, createOrGetDirectConversation);
+router.post('/group', requireEmailVerified, createGroupConversation);
 
 // Single conversation actions
 router.get('/:id', getConversationById);
 router.put('/:id', updateConversation);
-router.post('/:id/join', joinRoom);
+router.post('/:id/join', requireEmailVerified, joinRoom);
 router.post('/:id/leave', leaveConversation);
 
 // Membership management

@@ -20,6 +20,7 @@ import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore.js';
 import useGoogleAuth from '../hooks/useGoogleAuth.js';
 import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx';
+import PasswordStrengthMeter from '../components/ui/PasswordStrengthMeter.jsx';
 
 export default function AuthPage({ initialMode = 'login' }) {
   const navigate = useNavigate();
@@ -119,8 +120,8 @@ export default function AuthPage({ initialMode = 'login' }) {
 
     if (!registerForm.password) {
       errors.password = 'Password is required';
-    } else if (registerForm.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
+    } else if (registerForm.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
     }
 
     if (registerForm.password !== registerForm.confirmPassword) {
@@ -337,6 +338,12 @@ export default function AuthPage({ initialMode = 'login' }) {
                   <label className="block text-xs font-semibold text-text-primary">
                     Password
                   </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-brand-600 hover:text-brand-700 font-semibold transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-text-muted">
@@ -470,75 +477,75 @@ export default function AuthPage({ initialMode = 'login' }) {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-1">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={registerForm.password}
-                      onChange={(e) =>
-                        setRegisterForm({ ...registerForm, password: e.target.value })
-                      }
-                      placeholder="Min 6 chars"
-                      className={`w-full pl-3 pr-9 py-2 text-sm bg-surface-alt border rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all ${
-                        fieldErrors.password ? 'border-status-danger' : 'border-border-main'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-text-muted hover:text-text-primary"
-                    >
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={registerForm.password}
+                        onChange={(e) =>
+                          setRegisterForm({ ...registerForm, password: e.target.value })
+                        }
+                        placeholder="Min 8 chars"
+                        className={`w-full pl-3 pr-9 py-2 text-sm bg-surface-alt border rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all ${
+                          fieldErrors.password ? 'border-status-danger' : 'border-border-main'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-text-muted hover:text-text-primary"
+                      >
+                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {fieldErrors.password && (
+                      <p className="text-[11px] text-status-danger mt-1 font-medium">
+                        {fieldErrors.password}
+                      </p>
+                    )}
                   </div>
-                  {fieldErrors.password && (
-                    <p className="text-[11px] text-status-danger mt-1 font-medium">
-                      {fieldErrors.password}
-                    </p>
-                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={registerForm.confirmPassword}
+                        onChange={(e) =>
+                          setRegisterForm({
+                            ...registerForm,
+                            confirmPassword: e.target.value,
+                          })
+                        }
+                        placeholder="Repeat password"
+                        className={`w-full pl-3 pr-9 py-2 text-sm bg-surface-alt border rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all ${
+                          fieldErrors.confirmPassword ? 'border-status-danger' : 'border-border-main'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-text-muted hover:text-text-primary"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {fieldErrors.confirmPassword && (
+                      <p className="text-[11px] text-status-danger mt-1 font-medium">
+                        {fieldErrors.confirmPassword}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-1">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={registerForm.confirmPassword}
-                      onChange={(e) =>
-                        setRegisterForm({
-                          ...registerForm,
-                          confirmPassword: e.target.value,
-                        })
-                      }
-                      placeholder="Repeat password"
-                      className={`w-full pl-3 pr-9 py-2 text-sm bg-surface-alt border rounded-button text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface transition-all ${
-                        fieldErrors.confirmPassword ? 'border-status-danger' : 'border-border-main'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-text-muted hover:text-text-primary"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="w-3.5 h-3.5" />
-                      ) : (
-                        <Eye className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  {fieldErrors.confirmPassword && (
-                    <p className="text-[11px] text-status-danger mt-1 font-medium">
-                      {fieldErrors.confirmPassword}
-                    </p>
-                  )}
-                </div>
+                <PasswordStrengthMeter password={registerForm.password} />
               </div>
 
               <button

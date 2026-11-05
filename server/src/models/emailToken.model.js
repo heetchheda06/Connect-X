@@ -44,3 +44,4 @@ emailTokenSchema.index({ tokenHash: 1, type: 1 });
 
 export const EmailToken = mongoose.model('EmailToken', emailTokenSchema);
 export default EmailToken;
+
