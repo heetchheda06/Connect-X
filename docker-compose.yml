@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: connectx_mongo
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: connectx
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: connectx_server
+    restart: always
+    depends_on:
+      - mongodb
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://mongodb:27017/connectx
+      JWT_SECRET: connectx_production_jwt_secret_key_2026_super_secure
+      CLIENT_URL: http://localhost:80
+      REQUIRE_EMAIL_VERIFICATION: 'false'
+    ports:
+      - '5000:5000'
+    volumes:
+      - server_uploads:/app/uploads
+      - server_backups:/app/backups
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: connectx_client
+    restart: always
+    depends_on:
+      - server
+    ports:
+      - '80:80'
+
+volumes:
+  mongo_data:
+  server_uploads:
+  server_backups:

@@ -5,6 +5,8 @@ import Sidebar from '../components/sidebar/Sidebar.jsx';
 import ContactsView from '../components/chat/ContactsView.jsx';
 import CallsView from '../components/chat/CallsView.jsx';
 import StarredMessagesView from '../components/chat/StarredMessagesView.jsx';
+import NotificationsView from '../components/chat/NotificationsView.jsx';
+import AdminDashboardView from '../components/chat/AdminDashboardView.jsx';
 import ChatHeader from '../components/chat/ChatHeader.jsx';
 import MessageList from '../components/chat/MessageList.jsx';
 import Composer from '../components/chat/Composer.jsx';
@@ -253,6 +255,7 @@ export default function ChatPage() {
     if (!activeConversationId) return;
 
     const { content, attachment, replyTo, type, aiCard, poll, linkPreview } = messagePayload;
+    const clientMessageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     if (socket && socket.connected) {
       socket.emit('message:send', {
@@ -264,6 +267,7 @@ export default function ChatPage() {
         aiCard,
         poll,
         linkPreview,
+        clientMessageId,
       });
     } else {
       try {
@@ -275,6 +279,7 @@ export default function ChatPage() {
           aiCard,
           poll,
           linkPreview,
+          clientMessageId,
         });
       } catch (err) {
         toast.error(err.response?.data?.message || 'Failed to send message');
@@ -325,6 +330,14 @@ export default function ChatPage() {
 
         {activeTab === 'starred' && (
           <StarredMessagesView onClose={() => setActiveTab('chats')} />
+        )}
+
+        {activeTab === 'notifications' && (
+          <NotificationsView onClose={() => setActiveTab('chats')} />
+        )}
+
+        {activeTab === 'admin' && (
+          <AdminDashboardView onClose={() => setActiveTab('chats')} />
         )}
       </div>
 

@@ -19,6 +19,13 @@ import {
   unlinkGoogle,
   getMe,
   logout,
+  login2FAChallenge,
+  setup2FA,
+  verify2FA,
+  disable2FA,
+  scheduleAccountDeletion,
+  cancelAccountDeletion,
+  exportUserData,
 } from '../controllers/auth.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.js';
@@ -181,6 +188,7 @@ const setPasswordRules = [
 // Public Auth routes
 router.post('/register', authLimiter, validate(registerRules), register);
 router.post('/login', authLimiter, validate(loginRules), login);
+router.post('/login-2fa', authLimiter, login2FAChallenge);
 router.post('/google', authLimiter, validate(googleLoginRules), googleLogin);
 
 // Email Verification & Password Recovery routes
@@ -188,6 +196,17 @@ router.post('/verify-email', authLimiter, validate(verifyEmailRules), verifyEmai
 router.post('/resend-verification', authLimiter, validate(resendVerificationRules), resendVerification);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordRules), forgotPassword);
 router.post('/reset-password', authLimiter, validate(resetPasswordRules), resetPassword);
+
+// Two-Factor Authentication (2FA) routes
+router.post('/2fa/setup', protect, setup2FA);
+router.post('/2fa/verify', protect, verify2FA);
+router.post('/2fa/disable', protect, disable2FA);
+
+// Account Deletion & Data Privacy
+router.post('/delete-account', protect, scheduleAccountDeletion);
+router.post('/cancel-deletion', protect, cancelAccountDeletion);
+router.get('/export-data', protect, exportUserData);
+router.post('/export-data', protect, exportUserData);
 
 // Protected Auth, Session & Security routes
 router.get('/me', protect, getMe);

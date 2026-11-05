@@ -256,6 +256,93 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Admin, Safety & Moderation
+    role: {
+      type: String,
+      enum: ['user', 'moderator', 'admin'],
+      default: 'user',
+      index: true,
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    bannedReason: {
+      type: String,
+      default: '',
+    },
+    bannedAt: {
+      type: Date,
+      default: null,
+    },
+    // Terms, Consent & Age
+    termsAccepted: {
+      type: Boolean,
+      default: true,
+    },
+    termsVersion: {
+      type: String,
+      default: '1.0',
+    },
+    ageConfirmed: {
+      type: Boolean,
+      default: true,
+    },
+    // Optional Two-Step Verification (TOTP)
+    twoFactor: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      secret: {
+        type: String,
+        default: null,
+        select: false,
+      },
+      tempSecret: {
+        type: String,
+        default: null,
+        select: false,
+      },
+      backupCodes: {
+        type: [
+          {
+            codeHash: String,
+            used: { type: Boolean, default: false },
+          },
+        ],
+        default: [],
+        select: false,
+      },
+    },
+    // Account Deletion (14-day grace period)
+    scheduledDeletionAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    deletionReason: {
+      type: String,
+      default: '',
+    },
+    // Custom Status & Presence
+    presence: {
+      status: {
+        type: String,
+        enum: ['online', 'away', 'busy', 'dnd', 'offline'],
+        default: 'online',
+      },
+      customText: {
+        type: String,
+        default: '',
+        maxlength: 80,
+      },
+      customEmoji: {
+        type: String,
+        default: '',
+      },
+    },
   },
   {
     timestamps: true,
@@ -280,10 +367,15 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Safe JSON serialization (strip password)
+// Safe JSON serialization (strip password & sensitive 2FA fields)
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.password;
+  if (obj.twoFactor) {
+    delete obj.twoFactor.secret;
+    delete obj.twoFactor.tempSecret;
+    delete obj.twoFactor.backupCodes;
+  }
   return obj;
 };
 

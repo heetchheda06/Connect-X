@@ -1,5 +1,12 @@
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
+import speakeasy from 'speakeasy';
+import qrcode from 'qrcode';
+import jwt from 'jsonwebtoken';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const archiver = require('archiver');
 import User from '../models/user.model.js';
 import { generateToken } from '../utils/token.js';
 import { verifyFirebaseIdToken } from '../config/firebaseAdmin.js';
@@ -218,6 +225,23 @@ export const login = async (req, res, next) => {
     // 6. Reset failed login counter on success
     if (user.failedLogin?.count > 0 || user.failedLogin?.lockUntil) {
       user.failedLogin = { count: 0, lockUntil: null };
+    }
+
+    // 7. Check if Two-Factor Authentication (2FA) is enabled
+    if (user.twoFactor?.enabled) {
+      const twoFactorTicket = jwt.sign(
+        { sub: user._id.toString(), type: '2fa_challenge' },
+        env.jwtSecret,
+        { expiresIn: '5m' }
+      );
+      return res.status(200).json({
+        success: true,
+        message: 'Two-factor authentication required. Please enter your verification code.',
+        data: {
+          requires2FA: true,
+          twoFactorTicket,
+        },
+      });
     }
 
     // Update presence
@@ -1238,6 +1262,356 @@ export const revokeAllOtherSessions = async (req, res, next) => {
         revokedCount: count,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * 2FA Challenge during login
+ * POST /api/auth/2fa/login-challenge
+ */
+export const login2FAChallenge = async (req, res, next) => {
+  try {
+    const { twoFactorTicket, code, isBackupCode } = req.body;
+    if (!twoFactorTicket || !code) {
+      return res.status(400).json({
+        success: false,
+        message: '2FA ticket and verification code are required',
+        data: null,
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(twoFactorTicket, env.jwtSecret);
+      if (decoded.type !== '2fa_challenge') throw new Error('Invalid ticket type');
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: 'Two-factor authentication session expired. Please sign in again.',
+        data: null,
+      });
+    }
+
+    const user = await User.findById(decoded.sub).select('+twoFactor.secret +twoFactor.backupCodes');
+    if (!user || !user.twoFactor?.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'User account or 2FA setup not found.',
+        data: null,
+      });
+    }
+
+    const cleanCode = code.trim().replace(/\s|-/g, '');
+
+    if (isBackupCode) {
+      const codeHash = crypto.createHash('sha256').update(cleanCode.toUpperCase()).digest('hex');
+      const backupEntry = (user.twoFactor.backupCodes || []).find(
+        (b) => b.codeHash === codeHash && !b.used
+      );
+
+      if (!backupEntry) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or already utilized backup code.',
+          data: null,
+        });
+      }
+
+      backupEntry.used = true;
+      user.markModified('twoFactor.backupCodes');
+    } else {
+      const isValid = speakeasy.totp.verify({
+        secret: user.twoFactor.secret,
+        encoding: 'base32',
+        token: cleanCode,
+        window: 1,
+      });
+
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid 6-digit verification code.',
+          data: null,
+        });
+      }
+    }
+
+    user.isOnline = true;
+    user.lastSeen = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    // Create session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create session record after 2FA');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Two-factor authentication verified. Welcome back!',
+      data: {
+        user: user.toJSON(),
+        token,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Setup 2FA (Generate TOTP secret and QR code)
+ * POST /api/auth/2fa/setup
+ */
+export const setup2FA = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('+twoFactor.tempSecret');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const secret = speakeasy.generateSecret({
+      name: `ConnectX (${user.email})`,
+      issuer: 'ConnectX',
+      length: 20,
+    });
+
+    user.twoFactor = user.twoFactor || {};
+    user.twoFactor.tempSecret = secret.base32;
+    await user.save({ validateBeforeSave: false });
+
+    const qrCodeDataUrl = await qrcode.toDataURL(secret.otpauth_url);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        secret: secret.base32,
+        qrCode: qrCodeDataUrl,
+      },
+      message: 'Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Verify & Enable 2FA
+ * POST /api/auth/2fa/verify
+ */
+export const verify2FA = async (req, res, next) => {
+  try {
+    const { code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Verification code is required' });
+    }
+
+    const user = await User.findById(req.user._id).select(
+      '+twoFactor.tempSecret +twoFactor.secret +twoFactor.backupCodes'
+    );
+    if (!user || !user.twoFactor?.tempSecret) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please initiate 2FA setup first before verifying.',
+      });
+    }
+
+    const cleanCode = code.trim().replace(/\s|-/g, '');
+    const isValid = speakeasy.totp.verify({
+      secret: user.twoFactor.tempSecret,
+      encoding: 'base32',
+      token: cleanCode,
+      window: 1,
+    });
+
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please check your app and try again.',
+      });
+    }
+
+    // Generate 8 backup codes
+    const rawBackupCodes = [];
+    const hashedCodes = [];
+    for (let i = 0; i < 8; i++) {
+      const rawCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+      rawBackupCodes.push(rawCode);
+      const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
+      hashedCodes.push({ codeHash, used: false });
+    }
+
+    user.twoFactor.enabled = true;
+    user.twoFactor.secret = user.twoFactor.tempSecret;
+    user.twoFactor.tempSecret = null;
+    user.twoFactor.backupCodes = hashedCodes;
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        backupCodes: rawBackupCodes,
+      },
+      message: 'Two-step verification is now enabled on your account.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Disable 2FA
+ * POST /api/auth/2fa/disable
+ */
+export const disable2FA = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    const user = await User.findById(req.user._id).select('+password +twoFactor.secret +twoFactor.backupCodes');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.password && password) {
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Incorrect password.' });
+      }
+    }
+
+    user.twoFactor.enabled = false;
+    user.twoFactor.secret = null;
+    user.twoFactor.tempSecret = null;
+    user.twoFactor.backupCodes = [];
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Two-step verification has been disabled.',
+      data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Schedule Account Deletion (14-day grace period)
+ * POST /api/auth/delete-account
+ */
+export const scheduleAccountDeletion = async (req, res, next) => {
+  try {
+    const { password, reason } = req.body;
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.password && password) {
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Incorrect password.' });
+      }
+    }
+
+    const scheduledDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    user.scheduledDeletionAt = scheduledDate;
+    user.deletionReason = reason || 'User requested deletion';
+    await user.save({ validateBeforeSave: false });
+
+    // Revoke other sessions
+    if (req.sid) {
+      const io = req.app.get('io');
+      await sessionService.revokeAllOtherSessions(req.sid, user._id, io);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        scheduledDeletionAt: scheduledDate,
+      },
+      message: 'Your account is scheduled for deletion in 14 days. You can cancel anytime before then.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Cancel Account Deletion
+ * POST /api/auth/cancel-deletion
+ */
+export const cancelAccountDeletion = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    user.scheduledDeletionAt = null;
+    user.deletionReason = '';
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Account deletion cancelled successfully. Your account remains active.',
+      data: { user: user.toJSON() },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Export User Data as ZIP
+ * GET or POST /api/auth/export-data
+ */
+export const exportUserData = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+
+    const [user, contacts, conversations, messages] = await Promise.all([
+      User.findById(userId).select('-password').lean(),
+      mongoose.model('Contact').find({ user: userId }).lean().catch(() => []),
+      mongoose.model('Conversation').find({ participants: userId }).lean().catch(() => []),
+      mongoose.model('Message').find({ sender: userId }).sort({ createdAt: -1 }).limit(2000).lean().catch(() => []),
+    ]);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="connectx-data-export-${user.username || 'user'}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('error', (err) => {
+      logger.error({ err }, 'Error building user data export zip archive');
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Could not generate archive' });
+      }
+    });
+
+    archive.pipe(res);
+
+    archive.append(JSON.stringify(user, null, 2), { name: 'profile.json' });
+    archive.append(JSON.stringify(contacts, null, 2), { name: 'contacts.json' });
+    archive.append(JSON.stringify(conversations, null, 2), { name: 'conversations.json' });
+    archive.append(JSON.stringify(messages, null, 2), { name: 'messages.json' });
+    archive.append(
+      JSON.stringify(
+        {
+          exportDate: new Date().toISOString(),
+          appName: 'ConnectX',
+          version: '2.0.0',
+          totalMessagesExported: messages.length,
+          totalContacts: contacts.length,
+          totalConversations: conversations.length,
+        },
+        null,
+        2
+      ),
+      { name: 'manifest.json' }
+    );
+
+    await archive.finalize();
   } catch (error) {
     next(error);
   }

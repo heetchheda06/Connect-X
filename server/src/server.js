@@ -10,6 +10,7 @@ import { socketAuthMiddleware } from './sockets/socket.auth.js';
 import { registerSocketHandlers } from './sockets/socket.handler.js';
 import { initFirebaseAdmin } from './config/firebaseAdmin.js';
 import { reminderScheduler } from './services/reminderScheduler.js';
+import { messageScheduler } from './services/messageScheduler.js';
 import { emailService } from './services/emailService.js';
 import { setupGracefulShutdown } from './utils/shutdown.js';
 import logger from './utils/logger.js';
@@ -52,6 +53,7 @@ registerSocketHandlers(io);
 
 // Start background schedulers and queue workers
 reminderScheduler.start(io);
+messageScheduler.start(io);
 emailService.startQueueWorker();
 
 // Provide io instance to express app for REST-triggered broadcasts

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { loginApi, registerApi, getMeApi, logoutApi } from '../api/auth.api.js';
+import axiosInstance from '../api/axios.js';
 import { useAiStore } from './aiStore.js';
 
 const getInitialUser = () => {
@@ -70,6 +71,15 @@ export const useAuthStore = create((set, get) => ({
       set({ isLoading: true, error: null });
       const res = await loginApi(credentials);
 
+      if (res.data?.requires2FA) {
+        set({ isLoading: false });
+        return {
+          success: false,
+          requires2FA: true,
+          twoFactorTicket: res.data.twoFactorTicket,
+        };
+      }
+
       if (res.success && res.data) {
         const { user, token } = res.data;
         localStorage.setItem('connectx_token', token);
@@ -87,6 +97,37 @@ export const useAuthStore = create((set, get) => ({
       throw new Error(res.message || 'Login failed');
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Login failed';
+      set({ isLoading: false, error: msg });
+      return { success: false, error: msg };
+    }
+  },
+
+  verify2FALogin: async ({ twoFactorTicket, code, isBackupCode }) => {
+    try {
+      set({ isLoading: true, error: null });
+      const res = await axiosInstance.post('/api/auth/login-2fa', {
+        twoFactorTicket,
+        code,
+        isBackupCode,
+      });
+
+      if (res.data?.success && res.data?.data) {
+        const { user, token } = res.data.data;
+        localStorage.setItem('connectx_token', token);
+        localStorage.setItem('connectx_user', JSON.stringify(user));
+
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
+        return { success: true, user };
+      }
+      throw new Error(res.data?.message || 'Verification failed');
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Verification failed';
       set({ isLoading: false, error: msg });
       return { success: false, error: msg };
     }

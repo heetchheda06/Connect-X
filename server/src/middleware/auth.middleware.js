@@ -36,6 +36,17 @@ export const protect = async (req, res, next) => {
       });
     }
 
+    // Check if account is suspended/banned
+    if (user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: user.bannedReason
+          ? `Account suspended: ${user.bannedReason}`
+          : 'Your account has been suspended for violating Community Guidelines.',
+        data: null,
+      });
+    }
+
     // 3. Check tokenVersion
     const tokenVersionInToken = decoded.tv ?? decoded.tokenVersion ?? 0;
     const userTokenVersion = user.tokenVersion ?? 0;
@@ -79,4 +90,51 @@ export const protect = async (req, res, next) => {
 };
 
 export const authenticate = protect;
+
+export const optionalAuth = async (req, res, next) => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) return next();
+
+  try {
+    const decoded = jwt.verify(token, env.jwtSecret);
+    const userId = decoded.sub || decoded.id;
+    const user = await User.findById(userId).select('-password');
+    if (user && !user.isBanned) {
+      req.user = user;
+    }
+  } catch (err) {
+    // optional token invalid, ignore and proceed unauthenticated
+  }
+  next();
+};
+
+export const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin privileges required to access this resource.',
+      data: null,
+    });
+  }
+  next();
+};
+
+export const requireModerator = (req, res, next) => {
+  if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'moderator')) {
+    return res.status(403).json({
+      success: false,
+      message: 'Moderator or Admin privileges required.',
+      data: null,
+    });
+  }
+  next();
+};
+
 export default protect;

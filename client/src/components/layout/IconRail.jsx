@@ -8,7 +8,9 @@ import {
   LogOut,
   Settings,
   Phone,
-  Star
+  Star,
+  Bell,
+  ShieldCheck
 } from 'lucide-react';
 import Avatar from '../ui/Avatar.jsx';
 import { useAuthStore } from '../../store/authStore.js';
@@ -21,6 +23,8 @@ export default function IconRail({ activeTab = 'chats', onSelectTab, onOpenProfi
     { id: 'calls', label: 'Calls', icon: Phone },
     { id: 'contacts', label: 'Contacts', icon: Users },
     { id: 'starred', label: 'Starred', icon: Star },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    ...(user?.role === 'admin' ? [{ id: 'admin', label: 'Admin Dashboard', icon: ShieldCheck }] : []),
     { id: 'rooms', label: 'Public Rooms', icon: Compass },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

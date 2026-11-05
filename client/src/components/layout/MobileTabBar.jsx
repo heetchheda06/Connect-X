@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Phone, Users, User, Settings } from 'lucide-react';
+import { MessageSquare, Phone, Users, User, Settings, Bell } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore.js';
 
 export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) {
@@ -42,6 +42,16 @@ export default function MobileTabBar({ activeTab, onSelectTab, onOpenProfile }) 
       >
         <Users className="w-5 h-5" />
         <span className="text-[10px] font-semibold mt-1">Contacts</span>
+      </button>
+
+      <button
+        onClick={() => onSelectTab('notifications')}
+        className={`flex flex-col items-center justify-center w-14 h-full transition-colors ${
+          activeTab === 'notifications' ? 'text-brand-600' : 'text-text-muted hover:text-text-secondary'
+        }`}
+      >
+        <Bell className="w-5 h-5" />
+        <span className="text-[10px] font-semibold mt-1">Alerts</span>
       </button>
 
       <button

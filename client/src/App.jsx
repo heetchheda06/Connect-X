@@ -9,6 +9,11 @@ import ChatPage from './pages/ChatPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import VerifyEmailPage from './pages/VerifyEmailPage.jsx';
+import TermsPage from './pages/TermsPage.jsx';
+import PrivacyPage from './pages/PrivacyPage.jsx';
+import GuidelinesPage from './pages/GuidelinesPage.jsx';
+import StorageNoticePage from './pages/StorageNoticePage.jsx';
+import SupportPage from './pages/SupportPage.jsx';
 
 export default function App() {
   const { checkAuth } = useAuthStore();
@@ -88,6 +93,13 @@ export default function App() {
           path="/verify-email"
           element={<VerifyEmailPage />}
         />
+
+        {/* Public Legal & Support Routes */}
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/guidelines" element={<GuidelinesPage />} />
+        <Route path="/data-storage" element={<StorageNoticePage />} />
+        <Route path="/support" element={<SupportPage />} />
 
         {/* Protected Authenticated Routes */}
         <Route

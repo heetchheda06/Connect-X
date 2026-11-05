@@ -204,7 +204,28 @@ export const sendMessage = async (req, res, next) => {
       call = null,
       linkPreview = null,
       mentions = [],
+      clientMessageId = null,
     } = req.body;
+
+    // Deduplication check for reconnect/outbox retries
+    if (clientMessageId) {
+      const existingMessage = await Message.findOne({
+        clientMessageId,
+        conversation: conversationId,
+      });
+      if (existingMessage) {
+        const populated = await Message.findById(existingMessage._id)
+          .populate('sender', 'name username avatar isOnline lastSeen')
+          .populate('replyTo', 'content sender type attachment isDeletedForEveryone')
+          .populate('deliveredTo', 'name username avatar')
+          .populate('readBy.user', 'name username avatar');
+        return res.status(200).json({
+          success: true,
+          message: 'Message already sent (deduplicated)',
+          data: populated,
+        });
+      }
+    }
 
     if (!cleanContent && !attachment && !poll && !call) {
       return res.status(400).json({
@@ -271,6 +292,7 @@ export const sendMessage = async (req, res, next) => {
       mentions: mentions || [],
       expiresAt,
       replyTo: replyTo || null,
+      clientMessageId: clientMessageId || null,
       deliveredTo: [currentUserId],
       readBy: [{ user: currentUserId, readAt: new Date() }],
     });

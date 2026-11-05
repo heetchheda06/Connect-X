@@ -27,12 +27,22 @@ export default function AuthPage({ initialMode = 'login' }) {
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
 
-  const { login, register, isLoading } = useAuthStore();
+  const { login, register, verify2FALogin, isLoading } = useAuthStore();
   const { signInWithGoogle, isLoading: isGoogleLoading } = useGoogleAuth();
 
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // 2FA Challenge states
+  const [twoFactorTicket, setTwoFactorTicket] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const [is2FASubmitting, setIs2FASubmitting] = useState(false);
+
+  // Terms and Age confirmation
+  const [agreeTerms, setAgreeTerms] = useState(true);
+  const [confirmAge, setConfirmAge] = useState(true);
 
   const handleGoogleSignIn = async () => {
     const result = await signInWithGoogle();
@@ -82,6 +92,11 @@ export default function AuthPage({ initialMode = 'login' }) {
     }
 
     const result = await login(loginForm);
+    if (result.requires2FA) {
+      setTwoFactorTicket(result.twoFactorTicket);
+      toast('Please enter your 2FA verification code', { icon: '🔐' });
+      return;
+    }
     if (result.success) {
       toast.success(`Welcome back, ${result.user.name}! 🌊`, {
         style: {
@@ -93,6 +108,29 @@ export default function AuthPage({ initialMode = 'login' }) {
       navigate(from, { replace: true });
     } else {
       toast.error(result.error);
+    }
+  };
+
+  const handle2FASubmit = async (e) => {
+    e.preventDefault();
+    if (!twoFactorCode.trim()) {
+      toast.error(useBackupCode ? 'Please enter a backup code' : 'Please enter the 6-digit code');
+      return;
+    }
+
+    setIs2FASubmitting(true);
+    const result = await verify2FALogin({
+      twoFactorTicket,
+      code: twoFactorCode.trim(),
+      isBackupCode: useBackupCode,
+    });
+    setIs2FASubmitting(false);
+
+    if (result.success) {
+      toast.success(`Welcome back, ${result.user.name}! 🌊`);
+      navigate(from, { replace: true });
+    } else {
+      toast.error(result.error || 'Verification failed');
     }
   };
 
@@ -126,6 +164,13 @@ export default function AuthPage({ initialMode = 'login' }) {
 
     if (registerForm.password !== registerForm.confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!agreeTerms) {
+      errors.agreeTerms = 'You must agree to the Terms of Service and Privacy Policy';
+    }
+    if (!confirmAge) {
+      errors.confirmAge = 'You must confirm that you are at least 13 years old';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -294,17 +339,91 @@ export default function AuthPage({ initialMode = 'login' }) {
           {/* Form Header */}
           <div className="mb-6">
             <h2 className="text-2xl font-heading font-bold text-text-primary">
-              {mode === 'login' ? 'Welcome Back!' : 'Join ConnectX Today'}
+              {twoFactorTicket
+                ? 'Two-Factor Authentication'
+                : mode === 'login'
+                ? 'Welcome Back!'
+                : 'Join ConnectX Today'}
             </h2>
             <p className="text-xs sm:text-sm text-text-secondary mt-1">
-              {mode === 'login'
+              {twoFactorTicket
+                ? 'Please verify your identity to access your account.'
+                : mode === 'login'
                 ? 'Enter your credentials to access your real-time chats.'
                 : 'Sign up in seconds to start connecting with your teams and friends.'}
             </p>
           </div>
 
-          {/* LOGIN FORM */}
-          {mode === 'login' ? (
+          {/* 2FA CHALLENGE FORM */}
+          {twoFactorTicket ? (
+            <form onSubmit={handle2FASubmit} className="space-y-4">
+              <div className="p-4 rounded-xl bg-teal-50 border border-teal-200 text-center">
+                <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center mx-auto mb-2">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-teal-900">Security Verification</h3>
+                <p className="text-xs text-teal-700 mt-1">
+                  {useBackupCode
+                    ? 'Enter one of your 8-character emergency backup codes.'
+                    : 'Enter the 6-digit code from your authenticator app.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1.5">
+                  {useBackupCode ? 'Backup Code' : '6-Digit Verification Code'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  maxLength={useBackupCode ? 10 : 8}
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  placeholder={useBackupCode ? 'e.g. A1B2C3D4' : '123456'}
+                  className="w-full text-center tracking-widest text-lg font-mono px-4 py-2.5 bg-surface-alt border rounded-button text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-surface border-border-main"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUseBackupCode(!useBackupCode);
+                    setTwoFactorCode('');
+                  }}
+                  className="text-brand-600 font-medium hover:underline"
+                >
+                  {useBackupCode ? 'Use 6-digit authenticator code' : 'Use a backup code instead'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorTicket(null);
+                    setTwoFactorCode('');
+                  }}
+                  className="text-text-muted hover:text-text-primary"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={is2FASubmitting}
+                className="w-full py-3 px-4 rounded-button bg-brand-gradient text-white font-semibold text-sm shadow-brand hover:shadow-brand-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 active:scale-[0.99]"
+              >
+                {is2FASubmitting ? (
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Verify & Sign In
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : mode === 'login' ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-text-primary mb-1.5">
@@ -546,6 +665,49 @@ export default function AuthPage({ initialMode = 'login' }) {
                 </div>
 
                 <PasswordStrengthMeter password={registerForm.password} />
+
+                {/* Consent & Age Checkboxes */}
+                <div className="space-y-2 pt-2 text-xs text-text-secondary select-none">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreeTerms}
+                      onChange={(e) => setAgreeTerms(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand-600 focus:ring-brand-400 border-border-main mt-0.5 cursor-pointer"
+                    />
+                    <span>
+                      I agree to the{' '}
+                      <Link to="/terms" target="_blank" className="text-brand-600 font-semibold underline hover:text-brand-700">
+                        Terms of Service
+                      </Link>{' '}
+                      and{' '}
+                      <Link to="/privacy" target="_blank" className="text-brand-600 font-semibold underline hover:text-brand-700">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </span>
+                  </label>
+                  {fieldErrors.agreeTerms && (
+                    <p className="text-[11px] text-status-danger font-medium pl-6">
+                      {fieldErrors.agreeTerms}
+                    </p>
+                  )}
+
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confirmAge}
+                      onChange={(e) => setConfirmAge(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand-600 focus:ring-brand-400 border-border-main mt-0.5 cursor-pointer"
+                    />
+                    <span>I confirm that I am at least 13 years old.</span>
+                  </label>
+                  {fieldErrors.confirmAge && (
+                    <p className="text-[11px] text-status-danger font-medium pl-6">
+                      {fieldErrors.confirmAge}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <button

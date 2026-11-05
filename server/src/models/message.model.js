@@ -277,6 +277,12 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    clientMessageId: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+    },
     // Message Actions & Extension properties
     edited: {
       at: {

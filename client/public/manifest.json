@@ -1,0 +1,18 @@
+{
+  "name": "ConnectX - Next-Gen Real-Time Workspace & Chat",
+  "short_name": "ConnectX",
+  "description": "High-performance real-time messaging, WebRTC calls, assistive AI, and secure cloud communications.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F0F9FF",
+  "theme_color": "#0EA5C6",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

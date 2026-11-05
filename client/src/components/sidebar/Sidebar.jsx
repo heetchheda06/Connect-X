@@ -34,6 +34,9 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
     if (filter === 'unread' && (!conv.unreadCount || conv.unreadCount <= 0)) {
       return false;
     }
+    if (filter === 'direct' && conv.type !== 'direct') {
+      return false;
+    }
     if (filter === 'groups' && conv.type === 'direct') {
       return false;
     }
@@ -53,6 +56,7 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
   });
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+  const totalDirect = conversations.filter((c) => c.type === 'direct').length;
   const totalGroups = conversations.filter((c) => c.type !== 'direct').length;
 
   const handleConfirmClear = async (keepStarred) => {
@@ -169,6 +173,22 @@ export default function Sidebar({ onOpenNewChat, onOpenCreateGroup }) {
             }`}
           >
             All
+          </button>
+
+          <button
+            onClick={() => setFilter('direct')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              filter === 'direct'
+                ? 'bg-brand-500 text-white shadow-brand'
+                : 'bg-surface-alt text-text-secondary hover:text-text-primary border border-border-main'
+            }`}
+          >
+            <span>Direct</span>
+            {totalDirect > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-brand-100 text-brand-800 text-[10px]">
+                {totalDirect}
+              </span>
+            )}
           </button>
 
           <button

@@ -29,6 +29,9 @@ import settingsRoutes from './routes/settings.routes.js';
 import stickerRoutes from './routes/sticker.routes.js';
 import callRoutes from './routes/call.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import supportRoutes from './routes/support.routes.js';
+import pushRoutes from './routes/push.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getGridFSBucket } from './services/storage.service.js';
 import { httpLogger } from './utils/logger.js';
@@ -159,6 +162,9 @@ export const createApp = () => {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/stickers', stickerRoutes);
   app.use('/api/calls', callRoutes);
+  app.use('/api/support', supportRoutes);
+  app.use('/api/push', pushRoutes);
+  app.use('/api/notifications', notificationRoutes);
 
   // 404 & Centralized error handler
   app.use(notFoundHandler);

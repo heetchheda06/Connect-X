@@ -9,11 +9,21 @@ import {
   reactToMessage,
   votePoll,
 } from '../controllers/message.controller.js';
+import {
+  scheduleMessage,
+  getScheduledMessages,
+  cancelScheduledMessage,
+} from '../controllers/scheduledMessage.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
 router.use(protect);
+
+// Scheduled messages
+router.post('/schedule', scheduleMessage);
+router.get('/schedule', getScheduledMessages);
+router.delete('/schedule/:id', cancelScheduledMessage);
 
 // Starred messages list
 router.get('/starred', getStarredMessages);

@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Allow: /terms
+Allow: /privacy
+Allow: /guidelines
+Allow: /data-storage
+Allow: /support
+Disallow: /api/
+Disallow: /uploads/
+
+Sitemap: https://connect-x-1af38.web.app/sitemap.xml

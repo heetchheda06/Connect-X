@@ -373,6 +373,143 @@ export default function SettingsModal({ isOpen, onClose }) {
                   </div>
                 )}
 
+                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
+                {activeTab === 'devices' && (
+                  <div className="space-y-5">
+                    <div>
+                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-brand-500" />
+                        <span>Active Devices & Sessions</span>
+                      </h4>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
+                      </p>
+                    </div>
+
+                    {loadingSessions ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
+                        <span>Loading active sessions...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Current Device Session */}
+                        {(() => {
+                          const currentSession = sessions.find((s) => s.isCurrent);
+                          return (
+                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  This Device (Current Session)
+                                </span>
+                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 pt-1">
+                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
+                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                    <Smartphone className="w-5 h-5" />
+                                  ) : (
+                                    <Laptop className="w-5 h-5" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-text-primary truncate">
+                                    {currentSession?.deviceLabel || 'Current Browser'}
+                                  </p>
+                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
+                                    <Globe className="w-3 h-3 text-text-muted" />
+                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Other Sessions Section */}
+                        {(() => {
+                          const otherSessions = sessions.filter((s) => !s.isCurrent);
+                          return (
+                            <div className="space-y-3 pt-2">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-xs font-bold text-text-primary">
+                                  Other Active Devices ({otherSessions.length})
+                                </h5>
+
+                                {otherSessions.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRevokeAllOtherSessions}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
+                                  >
+                                    <LogOut className="w-3 h-3" />
+                                    <span>Log out all others</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {otherSessions.length === 0 ? (
+                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
+                                  No other devices signed in. Your account is only active on this device.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {otherSessions.map((s) => (
+                                    <div
+                                      key={s.sid}
+                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
+                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
+                                          s.deviceLabel?.toLowerCase().includes('android') ||
+                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                            <Smartphone className="w-4 h-4" />
+                                          ) : (
+                                            <Laptop className="w-4 h-4" />
+                                          )}
+                                        </div>
+
+                                        <div className="truncate">
+                                          <p className="text-xs font-semibold text-text-primary truncate">
+                                            {s.deviceLabel || 'Unknown Browser'}
+                                          </p>
+                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
+                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
+                                            <span>•</span>
+                                            <span>
+                                              Active{' '}
+                                              {s.lastActiveAt
+                                                ? new Date(s.lastActiveAt).toLocaleDateString()
+                                                : 'Recently'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRevokeSession(s.sid)}
+                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
+                                      >
+                                        Log out
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 2. NOTIFICATIONS TAB */}
                 {activeTab === 'notifications' && (
                   <div className="space-y-4">
@@ -421,6 +558,143 @@ export default function SettingsModal({ isOpen, onClose }) {
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
+                {activeTab === 'devices' && (
+                  <div className="space-y-5">
+                    <div>
+                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-brand-500" />
+                        <span>Active Devices & Sessions</span>
+                      </h4>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
+                      </p>
+                    </div>
+
+                    {loadingSessions ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
+                        <span>Loading active sessions...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Current Device Session */}
+                        {(() => {
+                          const currentSession = sessions.find((s) => s.isCurrent);
+                          return (
+                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  This Device (Current Session)
+                                </span>
+                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 pt-1">
+                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
+                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                    <Smartphone className="w-5 h-5" />
+                                  ) : (
+                                    <Laptop className="w-5 h-5" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-text-primary truncate">
+                                    {currentSession?.deviceLabel || 'Current Browser'}
+                                  </p>
+                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
+                                    <Globe className="w-3 h-3 text-text-muted" />
+                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Other Sessions Section */}
+                        {(() => {
+                          const otherSessions = sessions.filter((s) => !s.isCurrent);
+                          return (
+                            <div className="space-y-3 pt-2">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-xs font-bold text-text-primary">
+                                  Other Active Devices ({otherSessions.length})
+                                </h5>
+
+                                {otherSessions.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRevokeAllOtherSessions}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
+                                  >
+                                    <LogOut className="w-3 h-3" />
+                                    <span>Log out all others</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {otherSessions.length === 0 ? (
+                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
+                                  No other devices signed in. Your account is only active on this device.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {otherSessions.map((s) => (
+                                    <div
+                                      key={s.sid}
+                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
+                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
+                                          s.deviceLabel?.toLowerCase().includes('android') ||
+                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                            <Smartphone className="w-4 h-4" />
+                                          ) : (
+                                            <Laptop className="w-4 h-4" />
+                                          )}
+                                        </div>
+
+                                        <div className="truncate">
+                                          <p className="text-xs font-semibold text-text-primary truncate">
+                                            {s.deviceLabel || 'Unknown Browser'}
+                                          </p>
+                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
+                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
+                                            <span>•</span>
+                                            <span>
+                                              Active{' '}
+                                              {s.lastActiveAt
+                                                ? new Date(s.lastActiveAt).toLocaleDateString()
+                                                : 'Recently'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRevokeSession(s.sid)}
+                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
+                                      >
+                                        Log out
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -519,6 +793,143 @@ export default function SettingsModal({ isOpen, onClose }) {
                         </button>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
+                {activeTab === 'devices' && (
+                  <div className="space-y-5">
+                    <div>
+                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-brand-500" />
+                        <span>Active Devices & Sessions</span>
+                      </h4>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
+                      </p>
+                    </div>
+
+                    {loadingSessions ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
+                        <span>Loading active sessions...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Current Device Session */}
+                        {(() => {
+                          const currentSession = sessions.find((s) => s.isCurrent);
+                          return (
+                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  This Device (Current Session)
+                                </span>
+                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 pt-1">
+                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
+                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                    <Smartphone className="w-5 h-5" />
+                                  ) : (
+                                    <Laptop className="w-5 h-5" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-text-primary truncate">
+                                    {currentSession?.deviceLabel || 'Current Browser'}
+                                  </p>
+                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
+                                    <Globe className="w-3 h-3 text-text-muted" />
+                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Other Sessions Section */}
+                        {(() => {
+                          const otherSessions = sessions.filter((s) => !s.isCurrent);
+                          return (
+                            <div className="space-y-3 pt-2">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-xs font-bold text-text-primary">
+                                  Other Active Devices ({otherSessions.length})
+                                </h5>
+
+                                {otherSessions.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRevokeAllOtherSessions}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
+                                  >
+                                    <LogOut className="w-3 h-3" />
+                                    <span>Log out all others</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {otherSessions.length === 0 ? (
+                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
+                                  No other devices signed in. Your account is only active on this device.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {otherSessions.map((s) => (
+                                    <div
+                                      key={s.sid}
+                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
+                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
+                                          s.deviceLabel?.toLowerCase().includes('android') ||
+                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                            <Smartphone className="w-4 h-4" />
+                                          ) : (
+                                            <Laptop className="w-4 h-4" />
+                                          )}
+                                        </div>
+
+                                        <div className="truncate">
+                                          <p className="text-xs font-semibold text-text-primary truncate">
+                                            {s.deviceLabel || 'Unknown Browser'}
+                                          </p>
+                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
+                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
+                                            <span>•</span>
+                                            <span>
+                                              Active{' '}
+                                              {s.lastActiveAt
+                                                ? new Date(s.lastActiveAt).toLocaleDateString()
+                                                : 'Recently'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRevokeSession(s.sid)}
+                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
+                                      >
+                                        Log out
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -703,6 +1114,143 @@ export default function SettingsModal({ isOpen, onClose }) {
                   </div>
                 )}
 
+
+                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
+                {activeTab === 'devices' && (
+                  <div className="space-y-5">
+                    <div>
+                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-brand-500" />
+                        <span>Active Devices & Sessions</span>
+                      </h4>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
+                      </p>
+                    </div>
+
+                    {loadingSessions ? (
+                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
+                        <span>Loading active sessions...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Current Device Session */}
+                        {(() => {
+                          const currentSession = sessions.find((s) => s.isCurrent);
+                          return (
+                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  This Device (Current Session)
+                                </span>
+                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
+                              </div>
+
+                              <div className="flex items-center gap-3 pt-1">
+                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
+                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
+                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                    <Smartphone className="w-5 h-5" />
+                                  ) : (
+                                    <Laptop className="w-5 h-5" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-text-primary truncate">
+                                    {currentSession?.deviceLabel || 'Current Browser'}
+                                  </p>
+                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
+                                    <Globe className="w-3 h-3 text-text-muted" />
+                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Other Sessions Section */}
+                        {(() => {
+                          const otherSessions = sessions.filter((s) => !s.isCurrent);
+                          return (
+                            <div className="space-y-3 pt-2">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-xs font-bold text-text-primary">
+                                  Other Active Devices ({otherSessions.length})
+                                </h5>
+
+                                {otherSessions.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRevokeAllOtherSessions}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
+                                  >
+                                    <LogOut className="w-3 h-3" />
+                                    <span>Log out all others</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {otherSessions.length === 0 ? (
+                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
+                                  No other devices signed in. Your account is only active on this device.
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {otherSessions.map((s) => (
+                                    <div
+                                      key={s.sid}
+                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
+                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
+                                          s.deviceLabel?.toLowerCase().includes('android') ||
+                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
+                                            <Smartphone className="w-4 h-4" />
+                                          ) : (
+                                            <Laptop className="w-4 h-4" />
+                                          )}
+                                        </div>
+
+                                        <div className="truncate">
+                                          <p className="text-xs font-semibold text-text-primary truncate">
+                                            {s.deviceLabel || 'Unknown Browser'}
+                                          </p>
+                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
+                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
+                                            <span>•</span>
+                                            <span>
+                                              Active{' '}
+                                              {s.lastActiveAt
+                                                ? new Date(s.lastActiveAt).toLocaleDateString()
+                                                : 'Recently'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRevokeSession(s.sid)}
+                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
+                                      >
+                                        Log out
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

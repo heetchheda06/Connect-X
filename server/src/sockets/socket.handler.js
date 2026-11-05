@@ -108,7 +108,7 @@ export const registerSocketHandlers = (io) => {
     // ==================== EVENT: message:send ====================
     socket.on('message:send', async (payload, callback) => {
       try {
-        let { conversationId, content = '', type = 'text', attachment = null, replyTo = null, aiCard = null } = payload;
+        let { conversationId, content = '', type = 'text', attachment = null, replyTo = null, aiCard = null, clientMessageId = null } = payload;
 
         if (typeof content === 'object' && content !== null) {
           content = content.text || content.content || content.message || '';
@@ -123,6 +123,24 @@ export const registerSocketHandlers = (io) => {
             callback({ success: false, error: 'Message content, attachment, or card is required' });
           }
           return;
+        }
+
+        // Deduplication against outbox / reconnect retries
+        if (clientMessageId) {
+          const existing = await Message.findOne({ clientMessageId, conversation: conversationId });
+          if (existing) {
+            const populated = await Message.findById(existing._id)
+              .populate('sender', '_id name username avatar isOnline lastSeen')
+              .populate({
+                path: 'replyTo',
+                select: '_id content type attachment sender isDeletedForEveryone',
+                populate: { path: 'sender', select: '_id name username avatar' },
+              });
+            if (typeof callback === 'function') {
+              callback({ success: true, message: populated });
+            }
+            return;
+          }
         }
 
         const conversation = await Conversation.findById(conversationId);
@@ -162,6 +180,7 @@ export const registerSocketHandlers = (io) => {
           attachment,
           aiCard: aiCard || null,
           replyTo: replyTo || null,
+          clientMessageId: clientMessageId || null,
           deliveredTo,
           readBy,
         });
