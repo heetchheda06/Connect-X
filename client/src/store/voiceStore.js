@@ -70,7 +70,20 @@ export const useVoiceStore = create((set, get) => ({
         throw new Error(res.message || 'Transcription failed');
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Transcription failed';
+      let msg = err.response?.data?.message || err.message || 'Transcription failed';
+      if (typeof msg === 'string') {
+        if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || /429/.test(msg)) {
+          msg = 'AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.';
+        } else if (msg.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(msg);
+            msg = parsed.error?.message || 'Transcription failed';
+            if (msg.includes('quota') || /429/.test(msg)) {
+              msg = 'AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.';
+            }
+          } catch (_) {}
+        }
+      }
       set((state) => ({
         transcripts: {
           ...state.transcripts,

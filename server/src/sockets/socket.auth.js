@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import User from '../models/user.model.js';
+import sessionService from '../services/session.service.js';
 
 export const socketAuthMiddleware = async (socket, next) => {
   try {
@@ -18,17 +19,27 @@ export const socketAuthMiddleware = async (socket, next) => {
     }
 
     const decoded = jwt.verify(token, env.jwtSecret);
-    const user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.sub || decoded.id;
+    const user = await User.findById(userId).select('-password');
 
     if (!user) {
       return next(new Error('Authentication error: User account not found'));
     }
 
     // Verify tokenVersion to reject revoked/invalidated sessions
-    const tokenVersionInToken = decoded.tokenVersion ?? 0;
+    const tokenVersionInToken = decoded.tv ?? decoded.tokenVersion ?? 0;
     const userTokenVersion = user.tokenVersion ?? 0;
     if (tokenVersionInToken !== userTokenVersion) {
       return next(new Error('Authentication error: Session revoked. Please log in again'));
+    }
+
+    // Verify session ID (if present in token)
+    if (decoded.sid) {
+      const sessionCheck = await sessionService.verifySession(decoded.sid, user._id);
+      if (!sessionCheck.valid) {
+        return next(new Error('Authentication error: Session revoked or expired'));
+      }
+      socket.sid = decoded.sid;
     }
 
     socket.user = user;

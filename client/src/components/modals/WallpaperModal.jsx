@@ -65,10 +65,7 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
       const res = await setWallpaperApi(conversationId, finalWallpaper);
       if (res.success) {
         toast.success('Chat wallpaper updated! 🌊');
-        useChatStore.getState().upsertConversation({
-          _id: conversationId,
-          wallpaper: finalWallpaper,
-        });
+        useChatStore.getState().setConversationWallpaper(conversationId, finalWallpaper);
         if (onWallpaperChange) onWallpaperChange(finalWallpaper);
         onClose();
       }

@@ -6,6 +6,7 @@ import { verifyFirebaseIdToken } from '../config/firebaseAdmin.js';
 import { generateUniqueUsername } from '../services/usernameService.js';
 import { TokenService } from '../services/token.service.js';
 import { emailService } from '../services/emailService.js';
+import sessionService from '../services/session.service.js';
 import { env } from '../config/env.js';
 import {
   validatePassword,
@@ -104,7 +105,18 @@ export const register = async (req, res, next) => {
       logger.warn({ err: emailErr.message }, 'Could not enqueue registration verification email');
     }
 
-    const token = generateToken(user._id, user.tokenVersion);
+    // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
 
     return res.status(201).json({
       success: true,
@@ -213,7 +225,18 @@ export const login = async (req, res, next) => {
     user.lastSeen = new Date();
     await user.save({ validateBeforeSave: false });
 
-    const token = generateToken(user._id, user.tokenVersion);
+    // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
 
     return res.status(200).json({
       success: true,
@@ -284,7 +307,18 @@ export const googleLogin = async (req, res, next) => {
 
       await user.save({ validateBeforeSave: false });
 
-      const token = generateToken(user._id, user.tokenVersion);
+      // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
       return res.status(200).json({
         success: true,
         message: 'Welcome back!',
@@ -339,7 +373,18 @@ export const googleLogin = async (req, res, next) => {
       user.lastSeen = new Date();
       await user.save({ validateBeforeSave: false });
 
-      const token = generateToken(user._id, user.tokenVersion);
+      // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
       return res.status(200).json({
         success: true,
         message: 'Google account linked and signed in successfully.',
@@ -728,7 +773,18 @@ export const changePassword = async (req, res, next) => {
     } catch (e) {}
 
     // Issue updated token for current session so user remains logged in
-    const token = generateToken(user._id, user.tokenVersion);
+    // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
 
     return res.status(200).json({
       success: true,
@@ -1051,7 +1107,18 @@ export const unlinkGoogle = async (req, res, next) => {
     user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
-    const token = generateToken(user._id, user.tokenVersion);
+    // 8. Create active device session
+    let sid = null;
+    try {
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+      const sessionResult = await sessionService.createSession({ user, userAgent, ip });
+      sid = sessionResult.sid;
+    } catch (sessionErr) {
+      logger.warn({ err: sessionErr.message }, 'Could not create initial session record');
+    }
+
+    const token = generateToken(user._id, user.tokenVersion, sid);
 
     return res.status(200).json({
       success: true,
@@ -1091,12 +1158,85 @@ export const logout = async (req, res, next) => {
         isOnline: false,
         lastSeen: new Date(),
       });
+
+      if (req.sid) {
+        const io = req.app.get('io');
+        await sessionService.revokeSession(req.sid, req.user._id, io);
+      }
     }
 
     return res.status(200).json({
       success: true,
       message: 'Signed out successfully.',
       data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get active sessions for current user
+ * GET /api/auth/sessions
+ */
+export const getSessions = async (req, res, next) => {
+  try {
+    const sessions = await sessionService.getUserSessions(req.user._id, req.sid);
+    return res.status(200).json({
+      success: true,
+      message: 'Active sessions retrieved successfully.',
+      data: {
+        sessions,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Revoke specific session by sid
+ * DELETE /api/auth/sessions/:sid
+ */
+export const revokeSession = async (req, res, next) => {
+  try {
+    const { sid } = req.params;
+    const io = req.app.get('io');
+    const success = await sessionService.revokeSession(sid, req.user._id, io);
+
+    if (!success) {
+      return res.status(404).json({
+        success: false,
+        message: 'Session not found or already revoked.',
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Session logged out successfully.',
+      data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Revoke all other sessions except the current one
+ * POST /api/auth/sessions/revoke-others
+ */
+export const revokeAllOtherSessions = async (req, res, next) => {
+  try {
+    const io = req.app.get('io');
+    const count = await sessionService.revokeAllOtherSessions(req.sid, req.user._id, io);
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully logged out of ${count} other device(s).`,
+      data: {
+        revokedCount: count,
+      },
     });
   } catch (error) {
     next(error);

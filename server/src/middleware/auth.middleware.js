@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import User from '../models/user.model.js';
+import sessionService from '../services/session.service.js';
 
 export const protect = async (req, res, next) => {
   try {
@@ -21,11 +22,12 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // Verify token
+    // 1. Verify token cryptographic signature
     const decoded = jwt.verify(token, env.jwtSecret);
+    const userId = decoded.sub || decoded.id;
 
-    // Find active user
-    const user = await User.findById(decoded.id).select('-password');
+    // 2. Find active user
+    const user = await User.findById(userId).select('-password');
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -34,8 +36,8 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // Check tokenVersion to invalidate sessions on security events (password change, unlinking, takeover protection)
-    const tokenVersionInToken = decoded.tokenVersion ?? 0;
+    // 3. Check tokenVersion
+    const tokenVersionInToken = decoded.tv ?? decoded.tokenVersion ?? 0;
     const userTokenVersion = user.tokenVersion ?? 0;
     if (tokenVersionInToken !== userTokenVersion) {
       return res.status(401).json({
@@ -43,6 +45,19 @@ export const protect = async (req, res, next) => {
         message: 'Session has expired or was revoked. Please log in again.',
         data: null,
       });
+    }
+
+    // 4. Check session validity (if token has a sid)
+    if (decoded.sid) {
+      const sessionCheck = await sessionService.verifySession(decoded.sid, user._id);
+      if (!sessionCheck.valid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session has been revoked or expired. Please sign in again.',
+          data: null,
+        });
+      }
+      req.sid = decoded.sid;
     }
 
     req.user = user;
@@ -64,3 +79,4 @@ export const protect = async (req, res, next) => {
 };
 
 export const authenticate = protect;
+export default protect;

@@ -58,6 +58,8 @@ export default function CallModal() {
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1.0;
       const playPromise = remoteAudioRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
@@ -136,16 +138,16 @@ export default function CallModal() {
     const peer = activeCall.peer || {};
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-deep-900/90 backdrop-blur-lg p-2 sm:p-6 animate-fade-in select-none">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-deep-900/95 sm:bg-deep-900/90 backdrop-blur-lg p-0 sm:p-6 animate-fade-in select-none">
         {/* Dedicated Remote Audio Player (Essential for voice calls and background audio) */}
         <audio
           ref={remoteAudioRef}
           autoPlay
           playsInline
-          className="hidden"
+          style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }}
         />
 
-        <div className="relative w-full max-w-4xl h-[92vh] sm:h-[85vh] max-h-[720px] bg-deep-950 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col justify-between">
+        <div className="relative w-full h-[100dvh] sm:h-[85vh] sm:max-w-4xl sm:max-h-[720px] bg-deep-950 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl sm:border sm:border-white/10 flex flex-col justify-between">
           
           {/* Top Bar: Peer info, Timer & Mobile Quick Flip */}
           <div className="relative z-20 flex items-center justify-between p-3.5 sm:p-5 bg-gradient-to-b from-black/80 via-black/50 to-transparent">
@@ -257,7 +259,7 @@ export default function CallModal() {
           </div>
 
           {/* Bottom Call Controls Bar */}
-          <div className="relative z-20 flex items-center justify-center gap-2.5 sm:gap-6 px-3 py-4 sm:p-6 bg-gradient-to-t from-black/85 via-black/50 to-transparent">
+          <div className="relative z-20 flex items-center justify-center gap-3 sm:gap-6 px-3 pt-3 pb-8 sm:p-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
             {/* Mute Audio */}
             <button
               onClick={toggleMute}

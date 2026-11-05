@@ -49,6 +49,21 @@ import { toast } from 'react-hot-toast';
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 
+const safeText = (val) => {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const t = val.trim();
+    if (t === '[object Object]' || t === '{}' || t === 'null' || t === 'undefined') return '';
+    return val;
+  }
+  if (typeof val === 'object') {
+    const extracted = val.text || val.content || val.message || '';
+    if (typeof extracted === 'string' && extracted.trim() !== '[object Object]') return extracted;
+    return '';
+  }
+  return String(val);
+};
+
 export default function MessageBubble({
   message,
   isOwn,
@@ -288,7 +303,7 @@ export default function MessageBubble({
                 <p className="truncate text-[11px] opacity-90">
                   {message.replyTo.isDeletedForEveryone
                     ? '🚫 This message was deleted'
-                    : message.replyTo.content || 'Attachment'}
+                    : safeText(message.replyTo.content) || 'Attachment'}
                 </p>
               </div>
             )}
@@ -472,14 +487,9 @@ export default function MessageBubble({
                 )}
 
                 {/* Message Text */}
-                {message.content && !isAiCard && !isPoll && !isVoice && (
+                {!isAiCard && !isPoll && !isVoice && (
                   (() => {
-                    let displayContent = '';
-                    if (typeof message.content === 'string') {
-                      displayContent = message.content === '[object Object]' ? '' : message.content;
-                    } else if (typeof message.content === 'object' && message.content !== null) {
-                      displayContent = message.content.text || message.content.content || message.content.message || '';
-                    }
+                    const displayContent = safeText(message.content);
                     if (!displayContent) return null;
                     return (
                       <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
@@ -541,7 +551,7 @@ export default function MessageBubble({
                       ) : (
                         <div>
                           <p className="text-xs sm:text-sm font-normal leading-relaxed whitespace-pre-wrap break-words">
-                            {translation.showOriginal ? message.content : translation.translatedText}
+                            {translation.showOriginal ? safeText(message.content) : safeText(translation.translatedText)}
                           </p>
                         </div>
                       )}
@@ -551,12 +561,34 @@ export default function MessageBubble({
               </>
             )}
 
-            {/* Footer: Timestamp, Edited badge, Star, and Read Ticks */}
+            {/* Footer: Timestamp, Edited badge, Star, Read Ticks & Translate Button */}
             <div
               className={`flex items-center justify-end gap-1.5 mt-1 select-none text-[10px] ${
                 isOwn ? 'text-white/85' : 'text-text-muted'
               }`}
             >
+              {/* Quick Translate Button for Mobile / Instant Touch */}
+              {safeText(message.content) && !isDeleted && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleManualTranslate();
+                  }}
+                  className={`inline-flex items-center gap-1 mr-auto px-1.5 py-0.5 rounded-md transition-colors ${
+                    isOwn
+                      ? 'text-white/85 hover:text-white hover:bg-white/10'
+                      : 'text-brand-600 hover:text-brand-700 hover:bg-brand-50'
+                  }`}
+                  title={translation ? 'Toggle translation' : `Translate to ${targetLangLabel}`}
+                >
+                  <Languages className="w-3 h-3" />
+                  <span className="text-[9px] font-semibold">
+                    {translation ? (translation.showOriginal ? 'Translate' : 'Original') : 'Translate'}
+                  </span>
+                </button>
+              )}
+
               {message.edited?.at && <span className="italic opacity-75">(edited)</span>}
               {isStarred && <Star className="w-3 h-3 fill-amber-400 text-amber-400 inline" />}
               <span>{formatMessageTime(message.createdAt)}</span>

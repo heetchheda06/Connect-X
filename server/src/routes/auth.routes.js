@@ -11,6 +11,9 @@ import {
   changePassword,
   changeEmail,
   confirmEmailChange,
+  getSessions,
+  revokeSession,
+  revokeAllOtherSessions,
   setPassword,
   getAuthProviders,
   unlinkGoogle,
@@ -195,5 +198,10 @@ router.post('/change-email', protect, authLimiter, validate(changeEmailRules), c
 router.post('/confirm-email-change', authLimiter, validate(confirmEmailChangeRules), confirmEmailChange);
 router.post('/set-password', protect, authLimiter, validate(setPasswordRules), setPassword);
 router.post('/unlink-google', protect, authLimiter, unlinkGoogle);
+
+// Active Sessions & Devices
+router.get('/sessions', protect, getSessions);
+router.delete('/sessions/:sid', protect, revokeSession);
+router.post('/sessions/revoke-others', protect, revokeAllOtherSessions);
 
 export default router;

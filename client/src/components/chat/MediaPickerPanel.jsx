@@ -8,6 +8,7 @@ import {
   getTrendingGifsApi,
   searchGifsApi,
 } from '../../api/chat.api.js';
+import { getMediaUrl } from '../../utils/file.js';
 
 export default function MediaPickerPanel({
   isOpen,
@@ -245,7 +246,7 @@ export default function MediaPickerPanel({
                 title={pack.name}
               >
                 <img
-                  src={pack.cover}
+                  src={getMediaUrl(pack.cover)}
                   alt={pack.name}
                   className="w-6 h-6 object-contain"
                   onError={(e) => {
@@ -276,7 +277,7 @@ export default function MediaPickerPanel({
                   title={st.emojis?.join(' ')}
                 >
                   <img
-                    src={st.url}
+                    src={getMediaUrl(st.url)}
                     alt={st.emojis?.[0] || 'sticker'}
                     className="w-14 h-14 object-contain filter drop-shadow-sm select-none"
                     loading="lazy"

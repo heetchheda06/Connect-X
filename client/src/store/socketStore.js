@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
+import { toast } from 'react-hot-toast';
 import { useChatStore } from './chatStore.js';
 import { useAuthStore } from './authStore.js';
 import { useCallStore } from './callStore.js';
@@ -56,6 +57,17 @@ export const useSocketStore = create((set, get) => ({
 
     socket.io.on('reconnect', () => {
       set({ isConnected: true, isReconnecting: false });
+    });
+
+    // Remote session revocation handler
+    socket.on('session:revoked', ({ message }) => {
+      console.warn('⚠️ [Session] Current session was revoked from another device.');
+      toast.error(message || 'You have been signed out from this device.');
+      localStorage.removeItem('connectx_token');
+      localStorage.removeItem('connectx_user');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1000);
     });
 
     // Handle incoming typing status

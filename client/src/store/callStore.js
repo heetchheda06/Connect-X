@@ -240,7 +240,11 @@ export const useCallStore = create((set, get) => ({
       const pc = await get().initPeerConnection(targetUserId);
       if (!pc) return;
 
-      const offer = await pc.createOffer();
+      const isVideo = get().activeCall?.type === 'video';
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: isVideo,
+      });
       await pc.setLocalDescription(offer);
 
       const socket = useSocketStore.getState().socket;
@@ -276,7 +280,11 @@ export const useCallStore = create((set, get) => ({
         }
       }
 
-      const answer = await pc.createAnswer();
+      const isVideo = get().activeCall?.type === 'video';
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: isVideo,
+      });
       await pc.setLocalDescription(answer);
 
       const socket = useSocketStore.getState().socket;

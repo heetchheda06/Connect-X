@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="grad_cool" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </radialGradient>
+    <filter id="shadow_cool" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <circle cx="64" cy="64" r="56" fill="url(#grad_cool)" filter="url(#shadow_cool)"/>
+  <text x="64" y="78" font-size="64" text-anchor="middle" dominant-baseline="central">😎</text>
+</svg>

@@ -9,6 +9,7 @@ import { formatMessageDate } from '../../utils/date.js';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
 import { unpinMessageApi, starMessageApi } from '../../api/chat.api.js';
+import { getMediaUrl } from '../../utils/file.js';
 import { Loader2, Pin, X, Forward, Star, CheckSquare } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -148,10 +149,16 @@ export default function MessageList({
 
   // Wallpaper styling
   const wallpaperKey = conversation?.wallpaper || 'default';
-  const isCustomUrl = wallpaperKey.startsWith('http');
+  const isCustomUrl =
+    typeof wallpaperKey === 'string' &&
+    (wallpaperKey.startsWith('http') ||
+      wallpaperKey.startsWith('/') ||
+      wallpaperKey.startsWith('uploads') ||
+      wallpaperKey.startsWith('data:') ||
+      wallpaperKey.startsWith('blob:'));
   const wallpaperClass = !isCustomUrl ? WALLPAPER_CLASSES[wallpaperKey] || WALLPAPER_CLASSES.default : '';
   const customBgStyle = isCustomUrl
-    ? { backgroundImage: `url(${wallpaperKey})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    ? { backgroundImage: `url(${getMediaUrl(wallpaperKey)})`, backgroundSize: 'cover', backgroundPosition: 'center' }
     : {};
 
   return (

@@ -13,8 +13,11 @@ export const registerSocketHandlers = (io) => {
     const user = socket.user;
     const userId = user._id.toString();
 
-    // 1. Join personal room for targeted alerts (e.g. conversation list updates)
+    // 1. Join personal room for targeted alerts and session room for device logout
     socket.join(`user:${userId}`);
+    if (socket.sid) {
+      socket.join(`session_${socket.sid}`);
+    }
 
     // Register WebRTC call signaling handlers
     registerCallSocketHandlers(io, socket);

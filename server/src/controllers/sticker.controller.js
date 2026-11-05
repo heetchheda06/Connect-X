@@ -1,51 +1,51 @@
 import { StickerPack, Sticker, UserStickerState } from '../models/sticker.model.js';
 
-// Pre-defined official sticker assets (High-resolution, ultra-fast Cloudflare CDN Twemoji SVGs)
+// Pre-defined official sticker assets (Self-hosted high-resolution local vector SVGs)
 const OFFICIAL_PACKS_SEED = [
   {
     name: 'ConnectX Ocean Crew',
     author: 'ConnectX Official',
     isOfficial: true,
-    cover: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f42c.svg',
+    cover: '/stickers/dolphin.svg',
     stickers: [
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f42c.svg',
+        url: '/stickers/dolphin.svg',
         emojis: ['🐬', 'dolphin', 'happy', 'ocean'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f433.svg',
+        url: '/stickers/whale.svg',
         emojis: ['🐳', 'whale', 'big', 'sea'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9ad.svg',
+        url: '/stickers/seal.svg',
         emojis: ['🦭', 'seal', 'cute', 'clap'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f419.svg',
+        url: '/stickers/octopus.svg',
         emojis: ['🐙', 'octopus', 'tentacles', 'wave'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f420.svg',
+        url: '/stickers/fish.svg',
         emojis: ['🐠', 'fish', 'color', 'swim'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f980.svg',
+        url: '/stickers/crab.svg',
         emojis: ['🦀', 'crab', 'pinch', 'beach'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f988.svg',
+        url: '/stickers/shark.svg',
         emojis: ['🦈', 'shark', 'swim', 'ocean'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f30a.svg',
+        url: '/stickers/wave.svg',
         emojis: ['🌊', 'wave', 'cool', 'surf'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f422.svg',
+        url: '/stickers/turtle.svg',
         emojis: ['🐢', 'turtle', 'chill', 'sea'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2728.svg',
+        url: '/stickers/sparkles.svg',
         emojis: ['✨', 'sparkles', 'magic', 'clean'],
       },
     ],
@@ -54,54 +54,54 @@ const OFFICIAL_PACKS_SEED = [
     name: 'Everyday Moods',
     author: 'ConnectX Official',
     isOfficial: true,
-    cover: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f389.svg',
+    cover: '/stickers/party.svg',
     stickers: [
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f389.svg',
+        url: '/stickers/party.svg',
         emojis: ['🎉', 'party', 'celebrate', 'woohoo'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f525.svg',
+        url: '/stickers/fire.svg',
         emojis: ['🔥', 'fire', 'lit', 'awesome'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f680.svg',
+        url: '/stickers/rocket.svg',
         emojis: ['🚀', 'rocket', 'launch', 'fast'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/2705.svg',
+        url: '/stickers/check.svg',
         emojis: ['✅', 'done', 'yes', 'approved'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f4af.svg',
+        url: '/stickers/hundred.svg',
         emojis: ['💯', '100', 'perfect', 'agree'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f31f.svg',
+        url: '/stickers/star.svg',
         emojis: ['🌟', 'star', 'shine', 'best'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f44d.svg',
+        url: '/stickers/thumbsup.svg',
         emojis: ['👍', 'thumbsup', 'ok', 'good'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f44f.svg',
+        url: '/stickers/clap.svg',
         emojis: ['👏', 'clap', 'bravo', 'congrats'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f60e.svg',
+        url: '/stickers/cool.svg',
         emojis: ['😎', 'cool', 'sunglasses'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f602.svg',
+        url: '/stickers/joy.svg',
         emojis: ['😂', 'joy', 'lol', 'laugh'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f92f.svg',
+        url: '/stickers/mindblown.svg',
         emojis: ['🤯', 'mindblown', 'shock'],
       },
       {
-        url: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f63b.svg',
+        url: '/stickers/cat.svg',
         emojis: ['😻', 'cat', 'love', 'heart'],
       },
     ],
@@ -109,11 +109,13 @@ const OFFICIAL_PACKS_SEED = [
 ];
 
 /**
- * Ensures official sticker packs exist in the database with working CDN assets
+ * Ensures official sticker packs exist in the database with working local assets
  */
 export async function ensureOfficialPacks() {
   const existing = await StickerPack.find({ isOfficial: true });
-  const hasBrokenUrls = existing.some((p) => (p.cover || '').includes('iconify'));
+  const hasBrokenUrls = existing.some(
+    (p) => (p.cover || '').includes('iconify') || (p.cover || '').includes('jsdelivr')
+  );
 
   if (existing.length === 0 || hasBrokenUrls) {
     const oldPackIds = existing.map((p) => p._id);

@@ -100,6 +100,12 @@ export const createApp = () => {
   const uploadsDir = path.join(__dirname, '../uploads');
   app.use('/uploads', express.static(uploadsDir));
 
+  // Static stickers directory (serves local vector stickers with zero external CDN dependency)
+  const stickersDir = path.join(__dirname, '../../client/public/stickers');
+  if (fs.existsSync(stickersDir)) {
+    app.use('/stickers', express.static(stickersDir));
+  }
+
   // Fallback for files missing from ephemeral disk (fetches from MongoDB GridFS)
   app.get('/uploads/:filename', async (req, res, next) => {
     try {

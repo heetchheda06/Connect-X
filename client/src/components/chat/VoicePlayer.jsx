@@ -37,9 +37,10 @@ export default function VoicePlayer({ message, isOwn }) {
 
   const [localPlaying, setLocalPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(
-    attachment?.durationSec && Number.isFinite(attachment.durationSec) ? attachment.durationSec : 0
-  );
+  const [duration, setDuration] = useState(() => {
+    const d = Number(attachment?.durationSec);
+    return Number.isFinite(d) && d > 0 && d !== Infinity ? d : 0;
+  });
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
 
   const audioRef = useRef(null);
@@ -82,11 +83,12 @@ export default function VoicePlayer({ message, isOwn }) {
       const cur = audioRef.current.currentTime;
       setCurrentTime(cur);
       // For recorded WebM audio where browser sets initial duration to Infinity
-      if (!Number.isFinite(duration) || duration <= 0) {
-        if (Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
-          setDuration(audioRef.current.duration);
-        } else if (attachment?.durationSec && Number.isFinite(attachment.durationSec)) {
-          setDuration(attachment.durationSec);
+      if (!Number.isFinite(duration) || duration <= 0 || duration === Infinity) {
+        const d = audioRef.current.duration;
+        if (Number.isFinite(d) && d > 0 && d !== Infinity) {
+          setDuration(d);
+        } else if (attachment?.durationSec && Number.isFinite(Number(attachment.durationSec)) && Number(attachment.durationSec) > 0) {
+          setDuration(Number(attachment.durationSec));
         } else if (cur > 0) {
           setDuration(cur);
         }
@@ -95,10 +97,13 @@ export default function VoicePlayer({ message, isOwn }) {
   };
 
   const handleLoadedMetadata = () => {
-    if (audioRef.current && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
-      setDuration(audioRef.current.duration);
-    } else if (attachment?.durationSec && Number.isFinite(attachment.durationSec)) {
-      setDuration(attachment.durationSec);
+    if (audioRef.current) {
+      const d = audioRef.current.duration;
+      if (Number.isFinite(d) && d > 0 && d !== Infinity) {
+        setDuration(d);
+      } else if (attachment?.durationSec && Number.isFinite(Number(attachment.durationSec)) && Number(attachment.durationSec) > 0) {
+        setDuration(Number(attachment.durationSec));
+      }
     }
   };
 
@@ -117,9 +122,10 @@ export default function VoicePlayer({ message, isOwn }) {
   };
 
   const formatSeconds = (sec) => {
-    if (!sec || !Number.isFinite(sec) || isNaN(sec) || sec <= 0) return '0:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
+    const num = Number(sec);
+    if (!num || !Number.isFinite(num) || isNaN(num) || num <= 0 || num === Infinity) return '0:00';
+    const m = Math.floor(num / 60);
+    const s = Math.floor(num % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 

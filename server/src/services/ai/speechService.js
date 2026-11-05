@@ -154,6 +154,20 @@ ${languageHint ? `Spoken language hint: ${languageHint}.` : ''}
     } catch (err) {
       const latencyMs = Date.now() - startTime;
       console.error(`[AI Speech Audit] Audio transcription error | Model: ${model} | Latency: ${latencyMs}ms | Status: ERROR | Message: ${err.message}`);
+
+      const rawMsg = err.message || '';
+      if (
+        err.status === 429 ||
+        err.statusCode === 429 ||
+        rawMsg.includes('429') ||
+        rawMsg.includes('RESOURCE_EXHAUSTED') ||
+        rawMsg.includes('quota')
+      ) {
+        const friendlyErr = new Error('AI daily quota limit reached on the Free Tier. Please try again tomorrow or upgrade your Gemini API key.');
+        friendlyErr.statusCode = 429;
+        friendlyErr.code = 'AI_RATE_LIMIT';
+        throw friendlyErr;
+      }
       throw err;
     } finally {
       // Promptly delete any temporary file uploaded to the STT provider

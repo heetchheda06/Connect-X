@@ -603,10 +603,7 @@ export default function ChatHeader({
         conversationId={conversation._id}
         currentWallpaper={conversation.wallpaper}
         onWallpaperChange={(newWallpaper) => {
-          useChatStore.getState().upsertConversation({
-            _id: conversation._id,
-            wallpaper: newWallpaper,
-          });
+          useChatStore.getState().setConversationWallpaper(conversation._id, newWallpaper);
         }}
       />
     </>

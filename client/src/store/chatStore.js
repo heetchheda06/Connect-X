@@ -77,6 +77,22 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
+  // Instant reactive wallpaper update
+  setConversationWallpaper: (conversationId, wallpaper) => {
+    if (!conversationId) return;
+    set((state) => {
+      const idx = state.conversations.findIndex(
+        (c) => c._id?.toString() === conversationId?.toString()
+      );
+      if (idx !== -1) {
+        const updated = [...state.conversations];
+        updated[idx] = { ...updated[idx], wallpaper };
+        return { conversations: updated };
+      }
+      return state;
+    });
+  },
+
   // Fetch all conversations for current user
   fetchConversations: async () => {
     try {
