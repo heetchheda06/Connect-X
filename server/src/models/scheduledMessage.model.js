@@ -56,3 +56,4 @@ const scheduledMessageSchema = new mongoose.Schema(
 scheduledMessageSchema.index({ status: 1, scheduledFor: 1 });
 
 export default mongoose.model('ScheduledMessage', scheduledMessageSchema);
+

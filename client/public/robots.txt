@@ -9,3 +9,4 @@ Disallow: /api/
 Disallow: /uploads/
 
 Sitemap: https://connect-x-1af38.web.app/sitemap.xml
+

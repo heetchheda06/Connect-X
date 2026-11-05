@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { formatMessageTime } from '../../utils/date.js';
 import { formatFileSize, isImageFile, getMediaUrl } from '../../utils/file.js';
 import { useAiStore } from '../../store/aiStore.js';
@@ -28,6 +28,8 @@ import {
   Edit2,
   Copy,
   Smile,
+  MoreHorizontal,
+  CheckSquare,
   Phone,
   Video,
   PhoneMissed,
@@ -54,10 +56,18 @@ const safeText = (val) => {
   if (typeof val === 'string') {
     const t = val.trim();
     if (t === '[object Object]' || t === '{}' || t === 'null' || t === 'undefined') return '';
+    if (t.startsWith('{') && t.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(t);
+        if (parsed && typeof parsed === 'object') {
+          return parsed.text || parsed.content || parsed.message || parsed.translatedText || '';
+        }
+      } catch {}
+    }
     return val;
   }
   if (typeof val === 'object') {
-    const extracted = val.text || val.content || val.message || '';
+    const extracted = val.text || val.content || val.message || val.translatedText || '';
     if (typeof extracted === 'string' && extracted.trim() !== '[object Object]') return extracted;
     return '';
   }
@@ -84,7 +94,27 @@ export default function MessageBubble({
   const isDelivered = message.deliveredTo && message.deliveredTo.length > 1;
 
   const [isReactPickerOpen, setIsReactPickerOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const actionMenuRef = useRef(null);
+
+  // Auto-close popovers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target)) {
+        setIsMoreOpen(false);
+        setIsReactPickerOpen(false);
+      }
+    };
+    if (isMoreOpen || isReactPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isMoreOpen, isReactPickerOpen]);
 
   const attachment = message.attachment;
   const isVoice = message.type === 'voice' || (attachment && attachment.mimeType?.startsWith('audio/'));
@@ -282,7 +312,9 @@ export default function MessageBubble({
         ) : (
           /* ================= STANDARD BUBBLE CONTAINER ================= */
           <div
-            className={`relative px-4 py-2.5 rounded-bubble select-text transition-shadow ${
+            className={`relative px-4 py-2.5 rounded-bubble select-text transition-all ${
+              isSelected ? 'ring-2 ring-brand-500 shadow-md ring-offset-2 ring-offset-background' : ''
+            } ${
               isOwn
                 ? 'bg-brand-gradient text-white rounded-tr-bubble-tail shadow-brand'
                 : 'bg-surface text-text-primary rounded-tl-bubble-tail border border-border-main shadow-subtle'
@@ -631,134 +663,222 @@ export default function MessageBubble({
         )}
       </div>
 
-      {/* Floating Action Menu on Hover */}
+      {/* Floating Action Menu (Divided into Quick Hover Pill and Extended Selection Popover) */}
       {!isDeleted && (
         <div
-          className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 p-1 rounded-full bg-surface/90 backdrop-blur-sm border border-border-main shadow-subtle z-10 self-center`}
+          ref={actionMenuRef}
+          className={`relative self-center transition-all ${
+            isMoreOpen || isSelected ? 'opacity-100 z-30' : 'opacity-0 group-hover:opacity-100 z-10'
+          }`}
         >
-          {/* Reaction Quick Picker */}
-          <div className="relative">
-            <button
-              onClick={() => setIsReactPickerOpen(!isReactPickerOpen)}
-              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-              title="React"
-            >
-              <Smile className="w-3.5 h-3.5" />
-            </button>
+          {/* SECTION 1: Hover Pill (Emoji, Copy, Reply, Forward + More / Select Trigger) */}
+          <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-surface/95 backdrop-blur-md border border-border-main shadow-subtle">
+            {/* 1. Reaction Quick Picker Trigger */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReactPickerOpen(!isReactPickerOpen);
+                  setIsMoreOpen(false);
+                }}
+                className={`p-1.5 rounded-full transition-colors ${
+                  isReactPickerOpen
+                    ? 'bg-brand-50 text-brand-600'
+                    : 'text-text-muted hover:text-brand-600 hover:bg-surface-alt'
+                }`}
+                title="React with emoji"
+              >
+                <Smile className="w-3.5 h-3.5" />
+              </button>
 
-            {isReactPickerOpen && (
-              <div className="absolute bottom-8 left-0 flex items-center gap-1 p-1 bg-surface rounded-full border border-border-main shadow-brand-lg z-30 animate-fade-in">
-                {QUICK_REACTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => handleToggleReaction(emoji)}
-                    className="p-1 hover:scale-125 transition-transform text-base"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+              {/* Reaction Quick Picker Floating Bubble */}
+              {isReactPickerOpen && (
+                <div
+                  className={`absolute bottom-9 ${
+                    isOwn ? 'right-0' : 'left-0'
+                  } flex items-center gap-1.5 p-1.5 bg-surface rounded-full border border-border-main shadow-brand-lg z-50 animate-fade-in`}
+                >
+                  {QUICK_REACTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => handleToggleReaction(emoji)}
+                      className="p-1 hover:scale-125 transition-transform text-base"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Copy Text */}
+            {safeText(message.content) && (
+              <button
+                type="button"
+                onClick={handleCopyText}
+                className="p-1.5 rounded-full text-text-muted hover:text-brand-600 hover:bg-surface-alt transition-colors"
+                title="Copy message"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
             )}
-          </div>
 
-          {/* Star / Unstar */}
-          <button
-            onClick={handleToggleStar}
-            className={`p-1 rounded-full hover:bg-surface-alt transition-colors ${
-              isStarred ? 'text-amber-500' : 'text-text-muted hover:text-amber-500'
-            }`}
-            title={isStarred ? 'Unstar' : 'Star message'}
-          >
-            <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-amber-500' : ''}`} />
-          </button>
+            {/* 3. Reply */}
+            {onReply && (
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                className="p-1.5 rounded-full text-text-muted hover:text-brand-600 hover:bg-surface-alt transition-colors"
+                title="Reply"
+              >
+                <Reply className="w-3.5 h-3.5" />
+              </button>
+            )}
 
-          {/* Forward */}
-          {onForward && (
-            <button
-              onClick={() => onForward(message)}
-              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-              title="Forward"
-            >
-              <Forward className="w-3.5 h-3.5" />
-            </button>
-          )}
+            {/* 4. Forward */}
+            {onForward && (
+              <button
+                type="button"
+                onClick={() => onForward(message)}
+                className="p-1.5 rounded-full text-text-muted hover:text-brand-600 hover:bg-surface-alt transition-colors"
+                title="Forward"
+              >
+                <Forward className="w-3.5 h-3.5" />
+              </button>
+            )}
 
-          {/* Pin in chat */}
-          <button
-            onClick={handleTogglePin}
-            className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-            title="Pin in chat"
-          >
-            <Pin className="w-3.5 h-3.5" />
-          </button>
+            {/* Subtle Divider */}
+            <div className="w-[1px] h-3.5 bg-border-main mx-0.5" />
 
-          {/* Copy Text */}
-          {message.content && (
-            <button
-              onClick={handleCopyText}
-              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-              title="Copy text"
-            >
-              <Copy className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Translate to Selected Language */}
-          {message.content && !isDeleted && (
+            {/* 5. More / Select Trigger (Section 2 Opener) */}
             <button
               type="button"
-              onClick={handleManualTranslate}
-              disabled={isTranslatingMessage}
-              className={`p-1 rounded-full hover:bg-surface-alt transition-colors ${
-                translation ? 'text-brand-600 bg-brand-50' : 'text-text-muted hover:text-brand-600'
+              onClick={() => {
+                setIsMoreOpen(!isMoreOpen);
+                setIsReactPickerOpen(false);
+              }}
+              className={`p-1.5 rounded-full transition-colors ${
+                isMoreOpen || isSelected
+                  ? 'bg-brand-50 text-brand-600 ring-1 ring-brand-300'
+                  : 'text-text-muted hover:text-brand-600 hover:bg-surface-alt'
               }`}
-              title={
-                translation
-                  ? translation.showOriginal
-                    ? `Show translation (${targetLangLabel})`
-                    : 'Show original message'
-                  : `Translate to ${targetLangLabel}`
-              }
+              title="More options & selection"
             >
-              {isTranslatingMessage ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
-              ) : (
-                <Languages className="w-3.5 h-3.5" />
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* SECTION 2: Aesthetic Extended Menu Card (Star, Pin, Translate, Edit, Select, Delete) */}
+          {isMoreOpen && (
+            <div
+              className={`absolute bottom-10 ${
+                isOwn ? 'right-0' : 'left-0'
+              } min-w-[210px] p-1.5 rounded-2xl bg-surface/95 backdrop-blur-md border border-border-main shadow-2xl z-40 animate-fade-in divide-y divide-border-main/60`}
+            >
+              <div className="space-y-0.5 pb-1">
+                {/* Star / Unstar */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleStar();
+                    setIsMoreOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-primary hover:bg-surface-alt transition-colors text-left"
+                >
+                  <Star className={`w-4 h-4 ${isStarred ? 'text-amber-500 fill-amber-500' : 'text-text-muted'}`} />
+                  <span>{isStarred ? 'Unstar message' : 'Star message'}</span>
+                </button>
+
+                {/* Pin in Chat */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleTogglePin();
+                    setIsMoreOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-primary hover:bg-surface-alt transition-colors text-left"
+                >
+                  <Pin className="w-4 h-4 text-brand-600" />
+                  <span>Pin in chat</span>
+                </button>
+
+                {/* Translate to Selected Language */}
+                {safeText(message.content) && !isDeleted && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleManualTranslate();
+                      setIsMoreOpen(false);
+                    }}
+                    disabled={isTranslatingMessage}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text-primary hover:bg-surface-alt transition-colors text-left"
+                  >
+                    {isTranslatingMessage ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+                    ) : (
+                      <Languages className="w-4 h-4 text-brand-600" />
+                    )}
+                    <span className="truncate">
+                      {translation
+                        ? translation.showOriginal
+                          ? `Show translation (${targetLangLabel})`
+                          : 'Show original message'
+                        : `Translate (${targetLangLabel})`}
+                    </span>
+                  </button>
+                )}
+
+                {/* Edit (if within 15 mins and is own) */}
+                {canEdit && onEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      onEdit(message);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-text-primary hover:bg-surface-alt transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Edit2 className="w-4 h-4 text-slate-600" />
+                      <span>Edit message</span>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt text-text-muted">15m</span>
+                  </button>
+                )}
+
+                {/* Select / Deselect Message */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleSelectMessage(message._id);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors text-left ${
+                    isSelected ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-text-primary hover:bg-surface-alt'
+                  }`}
+                >
+                  <CheckSquare className={`w-4 h-4 ${isSelected ? 'text-brand-600' : 'text-text-muted'}`} />
+                  <span>{isSelected ? 'Deselect message' : 'Select message'}</span>
+                </button>
+              </div>
+
+              {/* Delete (Danger Zone) */}
+              {onDelete && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      onDelete(message);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-status-danger hover:bg-status-danger/10 transition-colors text-left"
+                  >
+                    <Trash2 className="w-4 h-4 text-status-danger" />
+                    <span>Delete message</span>
+                  </button>
+                </div>
               )}
-            </button>
-          )}
-
-          {/* Edit (if within 15 mins and is own) */}
-          {canEdit && onEdit && (
-            <button
-              onClick={() => onEdit(message)}
-              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-              title="Edit message (15m window)"
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Reply */}
-          {onReply && (
-            <button
-              onClick={() => onReply(message)}
-              className="p-1 rounded-full hover:bg-surface-alt text-text-muted hover:text-brand-600 transition-colors"
-              title="Reply"
-            >
-              <Reply className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Delete */}
-          {onDelete && (
-            <button
-              onClick={() => onDelete(message)}
-              className="p-1 rounded-full hover:bg-status-danger/10 text-text-muted hover:text-status-danger transition-colors"
-              title="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            </div>
           )}
         </div>
       )}

@@ -53,3 +53,4 @@ const supportTicketSchema = new mongoose.Schema(
 supportTicketSchema.index({ createdAt: -1 });
 
 export default mongoose.model('SupportTicket', supportTicketSchema);
+

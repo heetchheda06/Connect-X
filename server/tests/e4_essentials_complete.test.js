@@ -124,3 +124,4 @@ test('E7 - PushSubscription Model Schema Validation', () => {
   assert.equal(sub.keys.p256dh, 'BNcRdreALRFXTkOOUHK18WK25ypqDPY0-test');
   assert.equal(sub.keys.auth, 'tBHItDaAvaFedw-test');
 });
+
