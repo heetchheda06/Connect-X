@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { formatMessageTime } from '../../utils/date.js';
 import { formatFileSize, isImageFile, getMediaUrl } from '../../utils/file.js';
 import { useAiStore } from '../../store/aiStore.js';
@@ -95,8 +95,46 @@ export default function MessageBubble({
 
   const [isReactPickerOpen, setIsReactPickerOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [menuPlacement, setMenuPlacement] = useState('up'); // 'up' | 'down'
+  const [reactPickerPlacement, setReactPickerPlacement] = useState('up'); // 'up' | 'down'
   const [imageFailed, setImageFailed] = useState(false);
   const actionMenuRef = useRef(null);
+
+  // Dynamically calculate whether dropdown should flip downward to stay within boundaries
+  const updatePlacement = () => {
+    if (!actionMenuRef.current) return;
+    const triggerRect = actionMenuRef.current.getBoundingClientRect();
+    const container = actionMenuRef.current.closest('.overflow-y-auto') || document.documentElement;
+    const containerRect = container.getBoundingClientRect
+      ? container.getBoundingClientRect()
+      : { top: 64, bottom: window.innerHeight };
+
+    // Space available above and below inside the visible chat viewport
+    const spaceAbove = triggerRect.top - Math.max(containerRect.top, 64);
+    const spaceBelow = Math.min(containerRect.bottom, window.innerHeight) - triggerRect.bottom;
+
+    // The extended menu is approx ~260px tall. If space above is less than 270px, flip down!
+    if (spaceAbove < 270 && spaceBelow > 160) {
+      setMenuPlacement('down');
+    } else if (spaceAbove >= 270) {
+      setMenuPlacement('up');
+    } else {
+      setMenuPlacement(spaceBelow > spaceAbove ? 'down' : 'up');
+    }
+
+    // Reaction picker is ~46px tall
+    if (spaceAbove < 60 && spaceBelow >= 50) {
+      setReactPickerPlacement('down');
+    } else {
+      setReactPickerPlacement('up');
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (isMoreOpen || isReactPickerOpen) {
+      updatePlacement();
+    }
+  }, [isMoreOpen, isReactPickerOpen]);
 
   // Auto-close popovers when clicking outside
   useEffect(() => {
@@ -678,6 +716,7 @@ export default function MessageBubble({
               <button
                 type="button"
                 onClick={() => {
+                  updatePlacement();
                   setIsReactPickerOpen(!isReactPickerOpen);
                   setIsMoreOpen(false);
                 }}
@@ -694,7 +733,9 @@ export default function MessageBubble({
               {/* Reaction Quick Picker Floating Bubble */}
               {isReactPickerOpen && (
                 <div
-                  className={`absolute bottom-9 ${
+                  className={`absolute ${
+                    reactPickerPlacement === 'down' ? 'top-9 mt-1 origin-top' : 'bottom-9 mb-1 origin-bottom'
+                  } ${
                     isOwn ? 'right-0' : 'left-0'
                   } flex items-center gap-1.5 p-1.5 bg-surface rounded-full border border-border-main shadow-brand-lg z-50 animate-fade-in`}
                 >
@@ -755,6 +796,7 @@ export default function MessageBubble({
             <button
               type="button"
               onClick={() => {
+                updatePlacement();
                 setIsMoreOpen(!isMoreOpen);
                 setIsReactPickerOpen(false);
               }}
@@ -772,9 +814,11 @@ export default function MessageBubble({
           {/* SECTION 2: Aesthetic Extended Menu Card (Star, Pin, Translate, Edit, Select, Delete) */}
           {isMoreOpen && (
             <div
-              className={`absolute bottom-10 ${
+              className={`absolute ${
+                menuPlacement === 'down' ? 'top-10 mt-1.5 origin-top' : 'bottom-10 mb-1.5 origin-bottom'
+              } ${
                 isOwn ? 'right-0' : 'left-0'
-              } min-w-[210px] p-1.5 rounded-2xl bg-surface/95 backdrop-blur-md border border-border-main shadow-2xl z-40 animate-fade-in divide-y divide-border-main/60`}
+              } min-w-[210px] max-h-[min(340px,calc(100vh-140px))] overflow-y-auto p-1.5 rounded-2xl bg-surface/95 backdrop-blur-md border border-border-main shadow-2xl z-40 animate-fade-in divide-y divide-border-main/60`}
             >
               <div className="space-y-0.5 pb-1">
                 {/* Star / Unstar */}
