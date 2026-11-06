@@ -19,7 +19,9 @@ import {
   ShieldCheck,
   Image as ImageIcon,
   Upload,
-  Sparkles
+  Sparkles,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../api/axios.js';
 import { 
@@ -34,6 +36,16 @@ import {
   archiveAllChatsApi,
   setWallpaperApi
 } from '../../api/chat.api.js';
+import { 
+  exportDataApi, 
+  deleteAccountApi, 
+  cancelAccountDeletionApi 
+} from '../../api/auth.api.js';
+import { 
+  registerPushSubscription, 
+  unregisterPushSubscription, 
+  isPushNotificationSupported 
+} from '../../utils/push.js';
 import { uploadFileApi } from '../../api/upload.api.js';
 import { OCEAN_WALLPAPERS } from './WallpaperModal.jsx';
 import { useChatStore } from '../../store/chatStore.js';
@@ -79,6 +91,16 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [applyingToAll, setApplyingToAll] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
+  // User state & Data export / Account deletion state
+  const { user, setUser } = useAuthStore();
+  const [isExportingData, setIsExportingData] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isUpdatingPush, setIsUpdatingPush] = useState(false);
+
   const {
     settings: aiSettings,
     languages,
@@ -89,6 +111,86 @@ export default function SettingsModal({ isOpen, onClose }) {
     fetchProviders: fetchAiProviders,
     fetchSettings: fetchAiSettings,
   } = useAiStore();
+
+  const handleExportData = async () => {
+    try {
+      setIsExportingData(true);
+      const blob = await exportDataApi();
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/zip' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `connectx-data-export-${user?.username || 'user'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Your ConnectX data archive has been downloaded! 📦');
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to export data');
+    } finally {
+      setIsExportingData(false);
+    }
+  };
+
+  const handleCancelDeletion = async () => {
+    try {
+      setIsCancellingDeletion(true);
+      const res = await cancelAccountDeletionApi();
+      if (res.success) {
+        setUser({ ...user, scheduledDeletionAt: null });
+        toast.success('Account deletion request has been cancelled! 🎉');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to cancel deletion');
+    } finally {
+      setIsCancellingDeletion(false);
+    }
+  };
+
+  const handleScheduleDeletion = async (e) => {
+    e?.preventDefault();
+    try {
+      setIsDeletingAccount(true);
+      const res = await deleteAccountApi({ password: deletePassword, reason: deleteReason });
+      if (res.success) {
+        setUser({
+          ...user,
+          scheduledDeletionAt: res.data?.scheduledDeletionAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        });
+        setIsDeleteModalOpen(false);
+        setDeletePassword('');
+        setDeleteReason('');
+        toast.success('Account scheduled for deletion in 14 days.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to schedule deletion. Please check your password.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  const handleToggleDesktopNotifications = async (enable) => {
+    try {
+      setIsUpdatingPush(true);
+      if (enable) {
+        if (!isPushNotificationSupported()) {
+          toast.error('Push notifications are not supported by your browser.');
+          return;
+        }
+        await registerPushSubscription();
+        await handleSaveNotifications({ ...notifications, desktop: true });
+        toast.success('Desktop push notifications enabled! 🔔');
+      } else {
+        await unregisterPushSubscription();
+        await handleSaveNotifications({ ...notifications, desktop: false });
+        toast.success('Desktop push notifications disabled.');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update push notification settings');
+    } finally {
+      setIsUpdatingPush(false);
+    }
+  };
 
   const loadSessions = async () => {
     try {
@@ -487,6 +589,93 @@ export default function SettingsModal({ isOpen, onClose }) {
                           className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
                         />
                       </div>
+
+                      {/* Data Portability (Download My Data) */}
+                      <div className="pt-2">
+                        <div className="p-3.5 rounded-2xl bg-surface-alt border border-border-main space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-xl bg-brand-50 text-brand-600">
+                                <Download className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-text-primary">Download My Data</p>
+                                <span className="text-[11px] text-text-muted">Export your profile, contacts, chat metadata, and messages as a ZIP archive</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleExportData}
+                              disabled={isExportingData}
+                              className="px-3 py-1.5 rounded-xl bg-surface border border-border-main hover:bg-surface-alt text-brand-600 text-xs font-semibold flex items-center gap-1.5 transition-colors flex-shrink-0 disabled:opacity-50"
+                            >
+                              {isExportingData ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />
+                                  <span>Exporting...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download ZIP</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Account Deletion (Danger Zone) */}
+                      <div className="pt-1">
+                        {user?.scheduledDeletionAt ? (
+                          <div className="p-3.5 rounded-2xl border border-amber-300/80 bg-amber-50/60 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                                  <AlertTriangle className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-amber-900">
+                                    Account Scheduled for Deletion
+                                  </p>
+                                  <p className="text-[11px] text-amber-800/90">
+                                    Scheduled on {new Date(user.scheduledDeletionAt).toLocaleDateString()}. You can cancel deletion anytime during the 14-day grace period.
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleCancelDeletion}
+                                disabled={isCancellingDeletion}
+                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors flex-shrink-0 disabled:opacity-50"
+                              >
+                                {isCancellingDeletion ? 'Cancelling...' : 'Cancel Deletion'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3.5 rounded-2xl border border-status-danger/30 bg-status-danger/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-status-danger/10 text-status-danger">
+                                  <Trash2 className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-status-danger">Delete ConnectX Account</p>
+                                  <span className="text-[11px] text-text-muted">Permanently delete your account. A 14-day grace period applies before data purge.</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsDeleteModalOpen(true)}
+                                className="px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-status-danger text-xs font-semibold transition-colors flex-shrink-0"
+                              >
+                                Delete Account
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -528,14 +717,18 @@ export default function SettingsModal({ isOpen, onClose }) {
 
                       <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
                         <div>
-                          <p className="text-xs font-semibold text-text-primary">Desktop notifications</p>
-                          <span className="text-[11px] text-text-muted">Receive push notifications when app is in background</span>
+                          <p className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                            <span>Desktop notifications</span>
+                            {isUpdatingPush && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
+                          </p>
+                          <span className="text-[11px] text-text-muted">Receive web push notifications even when ConnectX tab is closed</span>
                         </div>
                         <input
                           type="checkbox"
+                          disabled={isUpdatingPush}
                           checked={notifications.desktop}
-                          onChange={(e) => handleSaveNotifications({ ...notifications, desktop: e.target.checked })}
-                          className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
+                          onChange={(e) => handleToggleDesktopNotifications(e.target.checked)}
+                          className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -1154,6 +1347,77 @@ export default function SettingsModal({ isOpen, onClose }) {
         isOpen={isOnboardingOpen}
         onClose={() => setIsOnboardingOpen(false)}
       />
+
+      {/* Delete Account Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-surface rounded-3xl p-6 shadow-2xl border border-border-main space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-status-danger/10 text-status-danger">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-text-primary">Delete ConnectX Account?</h3>
+                <p className="text-xs text-text-muted">14-day grace period before permanent purge</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed bg-surface-alt p-3 rounded-xl border border-border-main">
+              Scheduling deletion will log you out from other active sessions. You can log back in and cancel deletion anytime within the next <strong>14 days</strong>.
+            </p>
+
+            <form onSubmit={handleScheduleDeletion} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                  Reason for leaving (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder="e.g. Switching to another app, taking a break"
+                  className="w-full text-xs bg-surface border border-border-main rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-text-secondary mb-1">
+                  Confirm your password
+                </label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full text-xs bg-surface border border-border-main rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeletePassword('');
+                    setDeleteReason('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-surface-alt hover:bg-border-main/50 text-xs font-semibold text-text-secondary transition-colors"
+                >
+                  Keep Account
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingAccount}
+                  className="px-4 py-2 rounded-xl bg-status-danger hover:opacity-90 text-white text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isDeletingAccount && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Schedule Deletion</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

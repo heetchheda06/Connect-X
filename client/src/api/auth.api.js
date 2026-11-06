@@ -39,3 +39,20 @@ export const logoutApi = async () => {
   const response = await api.post('/auth/logout');
   return response.data;
 };
+
+export const exportDataApi = async () => {
+  const response = await api.get('/auth/export-data', {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const deleteAccountApi = async ({ password, reason } = {}) => {
+  const response = await api.post('/auth/delete-account', { password, reason });
+  return response.data;
+};
+
+export const cancelAccountDeletionApi = async () => {
+  const response = await api.post('/auth/cancel-deletion');
+  return response.data;
+};
