@@ -5,7 +5,7 @@ import { uploadFileApi } from '../../api/upload.api.js';
 import { useChatStore } from '../../store/chatStore.js';
 import { toast } from 'react-hot-toast';
 
-const OCEAN_WALLPAPERS = [
+export const OCEAN_WALLPAPERS = [
   { id: 'default', name: 'ConnectX Default', style: 'bg-chat-pattern', preview: '#f0fdfa' },
   { id: 'aqua-breeze', name: 'Aqua Breeze', style: 'bg-gradient-to-b from-[#e0f7fa] to-[#b2ebf2]', preview: '#b2ebf2' },
   { id: 'seafoam', name: 'Seafoam Mist', style: 'bg-gradient-to-b from-[#e8f5e9] to-[#c8e6c9]', preview: '#c8e6c9' },

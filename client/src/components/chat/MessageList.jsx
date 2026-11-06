@@ -8,6 +8,7 @@ import EditMessageModal from '../modals/EditMessageModal.jsx';
 import { formatMessageDate } from '../../utils/date.js';
 import { useChatStore } from '../../store/chatStore.js';
 import { useSocketStore } from '../../store/socketStore.js';
+import { useAuthStore } from '../../store/authStore.js';
 import { unpinMessageApi, starMessageApi } from '../../api/chat.api.js';
 import { getMediaUrl } from '../../utils/file.js';
 import { Loader2, Pin, X, Forward, Star, CheckSquare } from 'lucide-react';
@@ -147,8 +148,13 @@ export default function MessageList({
     groupedItems.push({ type: 'message', data: msg, id: msg._id });
   });
 
-  // Wallpaper styling
-  const wallpaperKey = conversation?.wallpaper || 'default';
+  // Wallpaper styling with reactive user default fallback
+  const { user } = useAuthStore();
+  const userDefault = user?.defaultWallpaper || 'default';
+  const wallpaperKey = (conversation?.wallpaper && conversation.wallpaper !== 'default')
+    ? conversation.wallpaper
+    : userDefault;
+
   const isCustomUrl =
     typeof wallpaperKey === 'string' &&
     (wallpaperKey.startsWith('http') ||

@@ -14,7 +14,10 @@ import {
   Laptop,
   Globe,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Image as ImageIcon,
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import api from '../../api/axios.js';
 import { 
@@ -26,8 +29,14 @@ import {
   unblockUserApi,
   clearAllChatsApi,
   deleteAllChatsApi,
-  archiveAllChatsApi
+  archiveAllChatsApi,
+  setWallpaperApi
 } from '../../api/chat.api.js';
+import { uploadFileApi } from '../../api/upload.api.js';
+import { OCEAN_WALLPAPERS } from './WallpaperModal.jsx';
+import { useChatStore } from '../../store/chatStore.js';
+import { useAuthStore } from '../../store/authStore.js';
+import { getMediaUrl } from '../../utils/file.js';
 import Avatar from '../ui/Avatar.jsx';
 import { toast } from 'react-hot-toast';
 
@@ -62,6 +71,8 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+  const [applyingToAll, setApplyingToAll] = useState(false);
 
   const loadSessions = async () => {
     try {
@@ -160,6 +171,73 @@ export default function SettingsModal({ isOpen, onClose }) {
       toast.success('Chat preferences saved 💬');
     } catch (err) {
       toast.error('Failed to update chat preferences');
+    }
+  };
+
+  const handleSelectDefaultWallpaper = async (wallpaperId) => {
+    const updated = { ...chatPrefs, defaultWallpaper: wallpaperId };
+    setChatPrefs(updated);
+    useAuthStore.getState().updateUser({ defaultWallpaper: wallpaperId });
+
+    // Update active conversation in store immediately if one is open
+    const { activeConversationId, setConversationWallpaper } = useChatStore.getState();
+    if (activeConversationId) {
+      setConversationWallpaper(activeConversationId, wallpaperId);
+      setWallpaperApi(activeConversationId, wallpaperId).catch(() => {});
+    }
+
+    try {
+      await updateChatPreferencesApi(updated);
+      const wpObj = OCEAN_WALLPAPERS.find((w) => w.id === wallpaperId);
+      const name = wpObj ? wpObj.name : 'Custom wallpaper';
+      toast.success(`Wallpaper set to ${name}! 🌊`);
+    } catch (err) {
+      toast.error('Failed to update default wallpaper');
+    }
+  };
+
+  const handleCustomWallpaperUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    try {
+      setUploadingWallpaper(true);
+      const res = await uploadFileApi(file);
+      if (res.success && res.data?.file?.url) {
+        const customUrl = res.data.file.url;
+        await handleSelectDefaultWallpaper(customUrl);
+        toast.success('Custom wallpaper uploaded and applied! 🖼️');
+      }
+    } catch (err) {
+      toast.error('Failed to upload custom wallpaper');
+    } finally {
+      setUploadingWallpaper(false);
+    }
+  };
+
+  const handleApplyToAllChats = async () => {
+    const targetWp = chatPrefs.defaultWallpaper || 'default';
+    try {
+      setApplyingToAll(true);
+      const { conversations, setConversationWallpaper } = useChatStore.getState();
+      if (!conversations || conversations.length === 0) {
+        toast.success('Default wallpaper saved! 🌊');
+        return;
+      }
+      conversations.forEach((c) => {
+        setConversationWallpaper(c._id, targetWp);
+        setWallpaperApi(c._id, targetWp).catch(() => {});
+      });
+      toast.success(`Applied wallpaper to all ${conversations.length} conversations! 🌊`);
+    } catch (err) {
+      toast.error('Failed to apply wallpaper to all chats');
+    } finally {
+      setApplyingToAll(false);
     }
   };
 
@@ -699,102 +777,214 @@ export default function SettingsModal({ isOpen, onClose }) {
                 )}
 
                 {/* 3. CHATS TAB */}
-                {activeTab === 'chats' && (
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary">Chat Preferences</h4>
-                      <p className="text-xs text-text-muted">Composer behavior and account-wide chat actions</p>
+                {activeTab === 'chats' && (() => {
+                  const currentWp = chatPrefs.defaultWallpaper || 'default';
+                  const isCustomWallpaper =
+                    typeof currentWp === 'string' &&
+                    (currentWp.startsWith('http') ||
+                      currentWp.startsWith('/') ||
+                      currentWp.startsWith('uploads') ||
+                      currentWp.startsWith('data:') ||
+                      currentWp.startsWith('blob:'));
+                  const activeWallpaperObj = OCEAN_WALLPAPERS.find((w) => w.id === currentWp);
+                  const activeWallpaperName = isCustomWallpaper ? 'Custom Image' : activeWallpaperObj?.name || 'ConnectX Default';
+
+                  return (
+                    <div className="space-y-5">
+                      {/* A. CHAT WALLPAPER SECTION */}
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-brand-600" />
+                            <span>Chat Wallpaper</span>
+                          </h4>
+                          <p className="text-xs text-text-muted mt-0.5">
+                            Choose a background for all your chats or upload a custom image
+                          </p>
+                        </div>
+
+                        {/* Wallpaper Grid Swatches */}
+                        <div className="grid grid-cols-4 gap-2.5 p-3 rounded-2xl bg-surface-alt border border-border-main">
+                          {OCEAN_WALLPAPERS.map((wp) => {
+                            const isSelected = !isCustomWallpaper && (chatPrefs.defaultWallpaper || 'default') === wp.id;
+                            return (
+                              <button
+                                key={wp.id}
+                                type="button"
+                                onClick={() => handleSelectDefaultWallpaper(wp.id)}
+                                className="relative flex flex-col items-center gap-1.5 p-1.5 rounded-xl hover:bg-surface transition-all group text-left"
+                              >
+                                <div
+                                  className={`w-full aspect-[4/3] rounded-xl border-2 transition-all flex items-center justify-center shadow-xs overflow-hidden ${
+                                    isSelected
+                                      ? 'border-brand-500 scale-105 shadow-brand ring-2 ring-brand-300'
+                                      : 'border-border-main group-hover:border-brand-300'
+                                  }`}
+                                  style={{ backgroundColor: wp.preview }}
+                                >
+                                  {isSelected && (
+                                    <div className="p-1 rounded-full bg-brand-500 text-white shadow-sm">
+                                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                    </div>
+                                  )}
+                                </div>
+                                <span
+                                  className={`text-[10px] font-semibold truncate max-w-full text-center ${
+                                    isSelected ? 'text-brand-700 font-bold' : 'text-text-secondary'
+                                  }`}
+                                >
+                                  {wp.name}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom Image Upload & Actions */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <label className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-dashed border-border-main hover:border-brand-400 bg-surface-alt/60 cursor-pointer transition-colors">
+                            <Upload className="w-4 h-4 text-brand-500" />
+                            <span className="text-xs font-semibold text-text-primary">
+                              {uploadingWallpaper ? 'Uploading Image...' : isCustomWallpaper ? 'Change Custom Wallpaper' : 'Upload Custom Image'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleCustomWallpaperUpload}
+                              disabled={uploadingWallpaper}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {isCustomWallpaper && (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectDefaultWallpaper('default')}
+                              className="px-3 py-2.5 rounded-xl border border-border-main text-xs font-semibold text-text-secondary hover:bg-surface-alt transition-colors"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Current Status Bar & Apply to all */}
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-brand-50/60 border border-brand-200/80 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-brand-500" />
+                            <span className="text-[11px] text-text-secondary">
+                              Active: <strong className="text-brand-800 font-bold">{activeWallpaperName}</strong>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleApplyToAllChats}
+                            disabled={applyingToAll}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold text-[11px] shadow-xs transition-all disabled:opacity-50"
+                          >
+                            {applyingToAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                            <span>Apply to all chats</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* B. CHAT PREFERENCES SECTION */}
+                      <div className="pt-4 border-t border-border-main space-y-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-text-primary">Chat Preferences</h4>
+                          <p className="text-xs text-text-muted">Composer behavior and account-wide chat actions</p>
+                        </div>
+
+                        <div className="space-y-3 pt-1">
+                          <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
+                            <div>
+                              <p className="text-xs font-semibold text-text-primary">Enter is send</p>
+                              <span className="text-[11px] text-text-muted">Pressing Enter will send message instead of new line</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={chatPrefs.enterIsSend}
+                              onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, enterIsSend: e.target.checked })}
+                              className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
+                            <div>
+                              <p className="text-xs font-semibold text-text-primary">Keep chats archived</p>
+                              <span className="text-[11px] text-text-muted">Archived chats remain archived when a new message arrives</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={chatPrefs.keepChatsArchived}
+                              onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, keepChatsArchived: e.target.checked })}
+                              className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
+                            <div>
+                              <p className="text-xs font-semibold text-text-primary">Rich link previews</p>
+                              <span className="text-[11px] text-text-muted">Show preview cards for web links you send and receive</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={chatPrefs.linkPreviews}
+                              onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, linkPreviews: e.target.checked })}
+                              className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* C. CHAT MANAGEMENT ACTIONS */}
+                      <div className="pt-4 border-t border-border-main space-y-2">
+                        <h5 className="text-xs font-bold text-text-muted uppercase">Chat Management</h5>
+
+                        <div className="flex items-center justify-between p-3 rounded-2xl border border-border-main hover:bg-surface-alt transition-colors">
+                          <div>
+                            <p className="text-xs font-semibold text-text-primary">Archive all chats</p>
+                            <span className="text-[11px] text-text-muted">Move all active conversations to your archived list</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleArchiveAllChats}
+                            className="px-3 py-1.5 rounded-xl border border-border-main text-xs font-semibold text-text-secondary hover:bg-surface"
+                          >
+                            Archive all
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded-2xl border border-status-danger/30 bg-status-danger/5">
+                          <div>
+                            <p className="text-xs font-semibold text-status-danger">Clear all messages</p>
+                            <span className="text-[11px] text-text-muted">Clear all messages across all chats for your view</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleClearAllChats}
+                            className="px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 rounded-2xl border border-status-danger/30 bg-status-danger/5">
+                          <div>
+                            <p className="text-xs font-semibold text-status-danger">Delete all chats</p>
+                            <span className="text-[11px] text-text-muted">Remove all direct chats from your conversations list</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDeleteAllChats}
+                            className="px-3 py-1.5 rounded-xl bg-status-danger text-white text-xs font-semibold hover:opacity-95"
+                          >
+                            Delete all
+                          </button>
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="space-y-3 pt-2">
-                      <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
-                        <div>
-                          <p className="text-xs font-semibold text-text-primary">Enter is send</p>
-                          <span className="text-[11px] text-text-muted">Pressing Enter will send message instead of new line</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={chatPrefs.enterIsSend}
-                          onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, enterIsSend: e.target.checked })}
-                          className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
-                        <div>
-                          <p className="text-xs font-semibold text-text-primary">Keep chats archived</p>
-                          <span className="text-[11px] text-text-muted">Archived chats remain archived when a new message arrives</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={chatPrefs.keepChatsArchived}
-                          onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, keepChatsArchived: e.target.checked })}
-                          className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main">
-                        <div>
-                          <p className="text-xs font-semibold text-text-primary">Rich link previews</p>
-                          <span className="text-[11px] text-text-muted">Show preview cards for web links you send and receive</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={chatPrefs.linkPreviews}
-                          onChange={(e) => handleSaveChatPrefs({ ...chatPrefs, linkPreviews: e.target.checked })}
-                          className="w-4 h-4 rounded text-brand-500 focus:ring-brand-400 cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Chat Management Actions */}
-                    <div className="pt-4 border-t border-border-main space-y-2">
-                      <h5 className="text-xs font-bold text-text-muted uppercase">Chat Management</h5>
-
-                      <div className="flex items-center justify-between p-3 rounded-2xl border border-border-main hover:bg-surface-alt transition-colors">
-                        <div>
-                          <p className="text-xs font-semibold text-text-primary">Archive all chats</p>
-                          <span className="text-[11px] text-text-muted">Move all active conversations to your archived list</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleArchiveAllChats}
-                          className="px-3 py-1.5 rounded-xl border border-border-main text-xs font-semibold text-text-secondary hover:bg-surface"
-                        >
-                          Archive all
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-2xl border border-status-danger/30 bg-status-danger/5">
-                        <div>
-                          <p className="text-xs font-semibold text-status-danger">Clear all messages</p>
-                          <span className="text-[11px] text-text-muted">Clear all messages across all chats for your view</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleClearAllChats}
-                          className="px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger"
-                        >
-                          Clear all
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 rounded-2xl border border-status-danger/30 bg-status-danger/5">
-                        <div>
-                          <p className="text-xs font-semibold text-status-danger">Delete all chats</p>
-                          <span className="text-[11px] text-text-muted">Remove all direct chats from your conversations list</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleDeleteAllChats}
-                          className="px-3 py-1.5 rounded-xl bg-status-danger text-white text-xs font-semibold hover:opacity-95"
-                        >
-                          Delete all
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
                 {activeTab === 'devices' && (
