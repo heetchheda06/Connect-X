@@ -29,7 +29,18 @@ export const updateUsernameApi = async (username) => {
   return response.data;
 };
 
-export const uploadAvatarApi = async (formData) => {
-  const response = await api.post('/users/avatar', formData);
+export const uploadAvatarApi = async (input) => {
+  let formData;
+  if (input instanceof FormData) {
+    formData = input;
+  } else if (input instanceof File || input instanceof Blob) {
+    formData = new FormData();
+    formData.append('avatar', input, input.name || 'avatar');
+  } else {
+    throw new Error('Invalid file format provided for avatar');
+  }
+  const response = await api.post('/users/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data;
 };

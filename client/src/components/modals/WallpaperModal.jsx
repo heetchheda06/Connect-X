@@ -46,15 +46,19 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
     try {
       setUploading(true);
       const res = await uploadFileApi(file);
-      if (res.success && res.data?.file?.url) {
-        setCustomUrl(res.data.file.url);
-        setSelected(res.data.file.url);
+      const uploadedUrl = res.data?.url || res.data?.file?.url;
+      if (res.success && uploadedUrl) {
+        setCustomUrl(uploadedUrl);
+        setSelected(uploadedUrl);
         toast.success('Custom wallpaper uploaded! 🖼️');
+      } else {
+        throw new Error(res.message || 'Failed to retrieve image URL');
       }
     } catch (err) {
-      toast.error('Failed to upload wallpaper image');
+      toast.error(err.response?.data?.message || err.message || 'Failed to upload wallpaper image');
     } finally {
       setUploading(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -109,11 +113,10 @@ export default function WallpaperModal({ isOpen, onClose, conversationId, curren
                 className={`relative flex flex-col items-center gap-1.5 cursor-pointer group`}
               >
                 <div
-                  className={`w-full aspect-square rounded-2xl border-2 transition-all flex items-center justify-center shadow-xs overflow-hidden ${
-                    isSelected
-                      ? 'border-brand-500 scale-105 shadow-brand'
-                      : 'border-border-main group-hover:border-brand-300'
-                  }`}
+                  className={`w-full aspect-square rounded-2xl border-2 transition-all flex items-center justify-center shadow-xs overflow-hidden ${isSelected
+                    ? 'border-brand-500 scale-105 shadow-brand'
+                    : 'border-border-main group-hover:border-brand-300'
+                    }`}
                   style={{ backgroundColor: wp.preview }}
                 >
                   {isSelected && (

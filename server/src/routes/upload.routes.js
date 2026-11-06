@@ -44,7 +44,7 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 const ALLOWED_EXTENSIONS = [
-  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg',
+  '.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.svg', '.jfif', '.heic', '.heif', '.bmp', '.tiff',
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.zip',
   '.webm', '.ogg', '.mp3', '.wav', '.m4a', '.aac', '.mp4'
 ];

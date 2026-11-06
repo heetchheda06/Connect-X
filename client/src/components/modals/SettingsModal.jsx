@@ -13,6 +13,8 @@ import {
   Smartphone,
   Laptop,
   Globe,
+  Clock,
+  ExternalLink,
   LogOut,
   ShieldCheck,
   Image as ImageIcon,
@@ -36,6 +38,8 @@ import { uploadFileApi } from '../../api/upload.api.js';
 import { OCEAN_WALLPAPERS } from './WallpaperModal.jsx';
 import { useChatStore } from '../../store/chatStore.js';
 import { useAuthStore } from '../../store/authStore.js';
+import { useAiStore } from '../../store/aiStore.js';
+import AiOnboardingModal from './AiOnboardingModal.jsx';
 import { getMediaUrl } from '../../utils/file.js';
 import Avatar from '../ui/Avatar.jsx';
 import { toast } from 'react-hot-toast';
@@ -73,6 +77,18 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
   const [applyingToAll, setApplyingToAll] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  const {
+    settings: aiSettings,
+    languages,
+    providers,
+    isUpdating: isUpdatingAi,
+    updateSettings: updateAiSettings,
+    fetchLanguages,
+    fetchProviders: fetchAiProviders,
+    fetchSettings: fetchAiSettings,
+  } = useAiStore();
 
   const loadSessions = async () => {
     try {
@@ -135,6 +151,9 @@ export default function SettingsModal({ isOpen, onClose }) {
       if (blockRes.success && blockRes.data?.blocks) {
         setBlockedUsers(blockRes.data.blocks);
       }
+      fetchAiSettings();
+      fetchLanguages();
+      fetchAiProviders();
     } catch (err) {
       console.error(err);
     } finally {
@@ -208,15 +227,18 @@ export default function SettingsModal({ isOpen, onClose }) {
     try {
       setUploadingWallpaper(true);
       const res = await uploadFileApi(file);
-      if (res.success && res.data?.file?.url) {
-        const customUrl = res.data.file.url;
+      const customUrl = res.data?.url || res.data?.file?.url;
+      if (res.success && customUrl) {
         await handleSelectDefaultWallpaper(customUrl);
         toast.success('Custom wallpaper uploaded and applied! 🖼️');
+      } else {
+        throw new Error(res.message || 'Failed to retrieve image URL');
       }
     } catch (err) {
-      toast.error('Failed to upload custom wallpaper');
+      toast.error(err.response?.data?.message || err.message || 'Failed to upload custom wallpaper');
     } finally {
       setUploadingWallpaper(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -339,6 +361,24 @@ export default function SettingsModal({ isOpen, onClose }) {
               <MessageSquare className="w-4 h-4" />
               <span>Chats & Wallpapers</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                activeTab === 'ai'
+                  ? 'bg-brand-50 text-brand-700 shadow-xs'
+                  : 'text-text-secondary hover:bg-surface-alt'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-brand-500" />
+                <span>AI Features</span>
+              </div>
+              {aiSettings?.enabled && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              )}
+            </button>
+
             <button
               onClick={() => setActiveTab('devices')}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
@@ -451,143 +491,6 @@ export default function SettingsModal({ isOpen, onClose }) {
                   </div>
                 )}
 
-                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
-                {activeTab === 'devices' && (
-                  <div className="space-y-5">
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-brand-500" />
-                        <span>Active Devices & Sessions</span>
-                      </h4>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
-                      </p>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
-                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Current Device Session */}
-                        {(() => {
-                          const currentSession = sessions.find((s) => s.isCurrent);
-                          return (
-                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  This Device (Current Session)
-                                </span>
-                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
-                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                    <Smartphone className="w-5 h-5" />
-                                  ) : (
-                                    <Laptop className="w-5 h-5" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-bold text-text-primary truncate">
-                                    {currentSession?.deviceLabel || 'Current Browser'}
-                                  </p>
-                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
-                                    <Globe className="w-3 h-3 text-text-muted" />
-                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Other Sessions Section */}
-                        {(() => {
-                          const otherSessions = sessions.filter((s) => !s.isCurrent);
-                          return (
-                            <div className="space-y-3 pt-2">
-                              <div className="flex items-center justify-between">
-                                <h5 className="text-xs font-bold text-text-primary">
-                                  Other Active Devices ({otherSessions.length})
-                                </h5>
-
-                                {otherSessions.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRevokeAllOtherSessions}
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
-                                  >
-                                    <LogOut className="w-3 h-3" />
-                                    <span>Log out all others</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {otherSessions.length === 0 ? (
-                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
-                                  No other devices signed in. Your account is only active on this device.
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {otherSessions.map((s) => (
-                                    <div
-                                      key={s.sid}
-                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
-                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
-                                          s.deviceLabel?.toLowerCase().includes('android') ||
-                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                            <Smartphone className="w-4 h-4" />
-                                          ) : (
-                                            <Laptop className="w-4 h-4" />
-                                          )}
-                                        </div>
-
-                                        <div className="truncate">
-                                          <p className="text-xs font-semibold text-text-primary truncate">
-                                            {s.deviceLabel || 'Unknown Browser'}
-                                          </p>
-                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
-                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
-                                            <span>•</span>
-                                            <span>
-                                              Active{' '}
-                                              {s.lastActiveAt
-                                                ? new Date(s.lastActiveAt).toLocaleDateString()
-                                                : 'Recently'}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRevokeSession(s.sid)}
-                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
-                                      >
-                                        Log out
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* 2. NOTIFICATIONS TAB */}
                 {activeTab === 'notifications' && (
                   <div className="space-y-4">
@@ -636,143 +539,6 @@ export default function SettingsModal({ isOpen, onClose }) {
                         />
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
-                {activeTab === 'devices' && (
-                  <div className="space-y-5">
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-brand-500" />
-                        <span>Active Devices & Sessions</span>
-                      </h4>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
-                      </p>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
-                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Current Device Session */}
-                        {(() => {
-                          const currentSession = sessions.find((s) => s.isCurrent);
-                          return (
-                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  This Device (Current Session)
-                                </span>
-                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
-                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                    <Smartphone className="w-5 h-5" />
-                                  ) : (
-                                    <Laptop className="w-5 h-5" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-bold text-text-primary truncate">
-                                    {currentSession?.deviceLabel || 'Current Browser'}
-                                  </p>
-                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
-                                    <Globe className="w-3 h-3 text-text-muted" />
-                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Other Sessions Section */}
-                        {(() => {
-                          const otherSessions = sessions.filter((s) => !s.isCurrent);
-                          return (
-                            <div className="space-y-3 pt-2">
-                              <div className="flex items-center justify-between">
-                                <h5 className="text-xs font-bold text-text-primary">
-                                  Other Active Devices ({otherSessions.length})
-                                </h5>
-
-                                {otherSessions.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRevokeAllOtherSessions}
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
-                                  >
-                                    <LogOut className="w-3 h-3" />
-                                    <span>Log out all others</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {otherSessions.length === 0 ? (
-                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
-                                  No other devices signed in. Your account is only active on this device.
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {otherSessions.map((s) => (
-                                    <div
-                                      key={s.sid}
-                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
-                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
-                                          s.deviceLabel?.toLowerCase().includes('android') ||
-                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                            <Smartphone className="w-4 h-4" />
-                                          ) : (
-                                            <Laptop className="w-4 h-4" />
-                                          )}
-                                        </div>
-
-                                        <div className="truncate">
-                                          <p className="text-xs font-semibold text-text-primary truncate">
-                                            {s.deviceLabel || 'Unknown Browser'}
-                                          </p>
-                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
-                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
-                                            <span>•</span>
-                                            <span>
-                                              Active{' '}
-                                              {s.lastActiveAt
-                                                ? new Date(s.lastActiveAt).toLocaleDateString()
-                                                : 'Recently'}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRevokeSession(s.sid)}
-                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
-                                      >
-                                        Log out
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -986,6 +752,217 @@ export default function SettingsModal({ isOpen, onClose }) {
                   );
                 })()}
 
+                {/* 4. AI FEATURES TAB */}
+                {activeTab === 'ai' && (
+                  <div className="space-y-5">
+                    {/* Master AI Toggle Card */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-surface-alt via-surface to-brand-50/40 border border-border-main space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-600 shrink-0">
+                            <Sparkles className="w-5 h-5 text-brand-500" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-text-primary">ConnectX AI Assistant</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  aiSettings?.enabled
+                                    ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                    : 'bg-gray-200 text-gray-600'
+                                }`}
+                              >
+                                {aiSettings?.enabled ? 'Active' : 'Disabled'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-text-muted mt-0.5">
+                              Master control for translation, smart replies, audio summaries, and reminders
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isUpdatingAi}
+                          onClick={async () => {
+                            const next = !aiSettings?.enabled;
+                            const res = await updateAiSettings({ enabled: next });
+                            if (res.success) {
+                              toast.success(next ? 'AI features enabled! ✨' : 'AI features disabled.');
+                            }
+                          }}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                            aiSettings?.enabled ? 'bg-brand-500' : 'bg-gray-300'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              aiSettings?.enabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-text-secondary leading-relaxed border-t border-border-main/50 pt-2">
+                        When enabled, relevant message snippets are processed by Google Gemini. You can customize individual features below.
+                      </p>
+                    </div>
+
+                    {aiSettings?.enabled ? (
+                      <div className="space-y-4">
+                        {/* Default Translation Language */}
+                        <div className="p-4 rounded-xl bg-surface-alt border border-border-main space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-text-primary flex items-center gap-2">
+                              <Globe className="w-4 h-4 text-brand-500" />
+                              Preferred Language for Translation
+                            </label>
+                            <span className="text-[10px] text-text-muted">Auto-translation target</span>
+                          </div>
+                          <select
+                            value={aiSettings?.defaultLanguage || 'gu'}
+                            disabled={isUpdatingAi}
+                            onChange={async (e) => {
+                              const lang = e.target.value;
+                              const res = await updateAiSettings({ defaultLanguage: lang });
+                              if (res.success) toast.success('Translation language updated');
+                            }}
+                            className="w-full text-xs bg-surface border border-border-main rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-brand-500 cursor-pointer"
+                          >
+                            {languages.map((l) => (
+                              <option key={l.code} value={l.code}>
+                                {l.name} ({l.englishName})
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-[11px] text-text-muted">
+                            Incoming messages in other languages will be translated into this language.
+                          </p>
+                        </div>
+
+                        {/* Reminder Timezone */}
+                        <div className="p-4 rounded-xl bg-surface-alt border border-border-main space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-text-primary flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-brand-500" />
+                              Reminder Timezone
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                                updateAiSettings({ reminderTimezone: sysTz });
+                                toast.success(`Set timezone to ${sysTz}`);
+                              }}
+                              className="text-[11px] text-brand-600 hover:underline font-medium"
+                            >
+                              Use System Timezone
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={aiSettings?.reminderTimezone || 'Asia/Kolkata'}
+                            disabled={isUpdatingAi}
+                            onChange={(e) => updateAiSettings({ reminderTimezone: e.target.value })}
+                            className="w-full text-xs bg-surface border border-border-main rounded-xl px-3 py-2 text-text-primary focus:outline-none focus:border-brand-500 font-mono"
+                            placeholder="e.g. Asia/Kolkata, America/New_York"
+                          />
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Asia/Dubai'].map((tz) => (
+                              <button
+                                key={tz}
+                                type="button"
+                                onClick={() => {
+                                  updateAiSettings({ reminderTimezone: tz });
+                                  toast.success(`Timezone set to ${tz}`);
+                                }}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-medium border transition-colors ${
+                                  aiSettings?.reminderTimezone === tz
+                                    ? 'bg-brand-50 text-brand-700 border-brand-300'
+                                    : 'bg-surface text-text-secondary border-border-main hover:bg-surface-alt'
+                                }`}
+                              >
+                                {tz}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Smart Replies Toggle */}
+                        <div className="p-4 rounded-xl bg-surface-alt border border-border-main flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-surface border border-border-main flex items-center justify-center text-brand-500 shrink-0">
+                              <MessageSquare className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-semibold text-text-primary block">Smart Reply Suggestions</span>
+                              <p className="text-[11px] text-text-muted">
+                                Shows 3 short suggested replies above composer in direct chats
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isUpdatingAi}
+                            onClick={async () => {
+                              const res = await updateAiSettings({ smartReplies: !aiSettings?.smartReplies });
+                              if (res.success) toast.success('Smart replies preference saved.');
+                            }}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                              aiSettings?.smartReplies ? 'bg-brand-500' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                aiSettings?.smartReplies ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Where your data goes Card */}
+                        <div className="p-4 rounded-xl bg-brand-50/50 border border-brand-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-xs font-bold text-brand-900 flex items-center gap-1.5">
+                              <ShieldCheck className="w-4 h-4 text-brand-600" />
+                              Where your data goes
+                            </h5>
+                            {providers?.policies?.gemini && (
+                              <a
+                                href={providers.policies.gemini}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] text-brand-600 font-semibold hover:underline inline-flex items-center gap-1"
+                              >
+                                Google AI Policy <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-text-secondary leading-relaxed">
+                            AI features run server-side using Google Gemini API. Only necessary snippets (e.g. the message being translated or the voice note being transcribed) are submitted. ConnectX does not share your private chats with third parties.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-8 rounded-xl bg-surface-alt border border-dashed border-border-main text-center space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-600 mx-auto">
+                          <Sparkles className="w-6 h-6 text-brand-500" />
+                        </div>
+                        <h4 className="text-sm font-bold text-text-primary">ConnectX AI is currently disabled</h4>
+                        <p className="text-xs text-text-muted max-w-sm mx-auto">
+                          Turn on AI to enable live translation in 16 languages, smart reply suggestions, audio summaries, and smart reminders.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsOnboardingOpen(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-button bg-brand-gradient text-white text-xs font-bold shadow-brand hover:opacity-95 transition-all"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Explore & Enable AI
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
                 {activeTab === 'devices' && (
                   <div className="space-y-5">
@@ -1167,285 +1144,16 @@ export default function SettingsModal({ isOpen, onClose }) {
                     </div>
                   </div>
                 )}
-                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
-                {activeTab === 'devices' && (
-                  <div className="space-y-5">
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-brand-500" />
-                        <span>Active Devices & Sessions</span>
-                      </h4>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
-                      </p>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
-                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Current Device Session */}
-                        {(() => {
-                          const currentSession = sessions.find((s) => s.isCurrent);
-                          return (
-                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  This Device (Current Session)
-                                </span>
-                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
-                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                    <Smartphone className="w-5 h-5" />
-                                  ) : (
-                                    <Laptop className="w-5 h-5" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-bold text-text-primary truncate">
-                                    {currentSession?.deviceLabel || 'Current Browser'}
-                                  </p>
-                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
-                                    <Globe className="w-3 h-3 text-text-muted" />
-                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Other Sessions Section */}
-                        {(() => {
-                          const otherSessions = sessions.filter((s) => !s.isCurrent);
-                          return (
-                            <div className="space-y-3 pt-2">
-                              <div className="flex items-center justify-between">
-                                <h5 className="text-xs font-bold text-text-primary">
-                                  Other Active Devices ({otherSessions.length})
-                                </h5>
-
-                                {otherSessions.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRevokeAllOtherSessions}
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
-                                  >
-                                    <LogOut className="w-3 h-3" />
-                                    <span>Log out all others</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {otherSessions.length === 0 ? (
-                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
-                                  No other devices signed in. Your account is only active on this device.
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {otherSessions.map((s) => (
-                                    <div
-                                      key={s.sid}
-                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
-                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
-                                          s.deviceLabel?.toLowerCase().includes('android') ||
-                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                            <Smartphone className="w-4 h-4" />
-                                          ) : (
-                                            <Laptop className="w-4 h-4" />
-                                          )}
-                                        </div>
-
-                                        <div className="truncate">
-                                          <p className="text-xs font-semibold text-text-primary truncate">
-                                            {s.deviceLabel || 'Unknown Browser'}
-                                          </p>
-                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
-                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
-                                            <span>•</span>
-                                            <span>
-                                              Active{' '}
-                                              {s.lastActiveAt
-                                                ? new Date(s.lastActiveAt).toLocaleDateString()
-                                                : 'Recently'}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRevokeSession(s.sid)}
-                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
-                                      >
-                                        Log out
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-
-                {/* 5. DEVICES & ACTIVE SESSIONS TAB */}
-                {activeTab === 'devices' && (
-                  <div className="space-y-5">
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-brand-500" />
-                        <span>Active Devices & Sessions</span>
-                      </h4>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        Manage all browsers and devices currently signed in to your ConnectX account. You can log out from any unfamiliar device instantly.
-                      </p>
-                    </div>
-
-                    {loadingSessions ? (
-                      <div className="py-12 flex flex-col items-center justify-center text-xs text-text-muted">
-                        <Loader2 className="w-5 h-5 animate-spin text-brand-500 mb-2" />
-                        <span>Loading active sessions...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Current Device Session */}
-                        {(() => {
-                          const currentSession = sessions.find((s) => s.isCurrent);
-                          return (
-                            <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200/80 shadow-xs space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-brand-700 uppercase tracking-wide px-2 py-0.5 rounded-full bg-brand-100/80 border border-brand-200">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  This Device (Current Session)
-                                </span>
-                                <span className="text-[11px] font-medium text-emerald-600">Active Now</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 pt-1">
-                                <div className="p-2.5 rounded-xl bg-white shadow-subtle text-brand-600 border border-brand-100">
-                                  {currentSession?.deviceLabel?.toLowerCase().includes('mobile') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('android') ||
-                                  currentSession?.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                    <Smartphone className="w-5 h-5" />
-                                  ) : (
-                                    <Laptop className="w-5 h-5" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-bold text-text-primary truncate">
-                                    {currentSession?.deviceLabel || 'Current Browser'}
-                                  </p>
-                                  <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5">
-                                    <Globe className="w-3 h-3 text-text-muted" />
-                                    <span>Approx. IP: {currentSession?.ipTruncated || '127.0.0.0/24'}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Other Sessions Section */}
-                        {(() => {
-                          const otherSessions = sessions.filter((s) => !s.isCurrent);
-                          return (
-                            <div className="space-y-3 pt-2">
-                              <div className="flex items-center justify-between">
-                                <h5 className="text-xs font-bold text-text-primary">
-                                  Other Active Devices ({otherSessions.length})
-                                </h5>
-
-                                {otherSessions.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRevokeAllOtherSessions}
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-danger hover:underline"
-                                  >
-                                    <LogOut className="w-3 h-3" />
-                                    <span>Log out all others</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {otherSessions.length === 0 ? (
-                                <div className="p-6 rounded-2xl bg-surface-alt/40 border border-border-main text-center text-xs text-text-muted">
-                                  No other devices signed in. Your account is only active on this device.
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {otherSessions.map((s) => (
-                                    <div
-                                      key={s.sid}
-                                      className="flex items-center justify-between p-3 rounded-2xl bg-surface-alt border border-border-main hover:border-brand-200 transition-all"
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="p-2 rounded-xl bg-surface shadow-subtle text-text-secondary border border-border-main">
-                                          {s.deviceLabel?.toLowerCase().includes('mobile') ||
-                                          s.deviceLabel?.toLowerCase().includes('android') ||
-                                          s.deviceLabel?.toLowerCase().includes('iphone') ? (
-                                            <Smartphone className="w-4 h-4" />
-                                          ) : (
-                                            <Laptop className="w-4 h-4" />
-                                          )}
-                                        </div>
-
-                                        <div className="truncate">
-                                          <p className="text-xs font-semibold text-text-primary truncate">
-                                            {s.deviceLabel || 'Unknown Browser'}
-                                          </p>
-                                          <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5">
-                                            <span>IP: {s.ipTruncated || 'Unknown'}</span>
-                                            <span>•</span>
-                                            <span>
-                                              Active{' '}
-                                              {s.lastActiveAt
-                                                ? new Date(s.lastActiveAt).toLocaleDateString()
-                                                : 'Recently'}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRevokeSession(s.sid)}
-                                        className="ml-2 px-3 py-1.5 rounded-xl bg-status-danger/10 hover:bg-status-danger/20 text-xs font-semibold text-status-danger transition-colors flex-shrink-0"
-                                      >
-                                        Log out
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
               </>
             )}
           </div>
         </div>
       </div>
+
+      <AiOnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+      />
     </div>
   );
 }
